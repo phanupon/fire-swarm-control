@@ -1,0 +1,20 @@
+{
+  "name": "firefront-swarm-console",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-time 3D simulation of a wildfire-surveying drone swarm under energy, smoke and heat constraints",
+  "scripts": {
+    "dev": "npx --yes serve . -l 5173",
+    "build": "echo \"static site — no build step\"",
+    "deploy": "npx --yes vercel deploy --prod"
+  },
+  "keywords": [
+    "wildfire",
+    "drone-swarm",
+    "path-planning",
+    "cellular-automata",
+    "threejs",
+    "simulation"
+  ],
+  "license": "MIT"
+}

@@ -1,0 +1,1857 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#131010">
+<meta name="description" content="ซิมูเลชัน 3D แบบเรียลไทม์ของฝูงโดรนสำรวจไฟป่า — โมเดลการวางเส้นทางภายใต้ข้อจำกัดพลังงาน หมอกควัน และความร้อน พร้อมโมเดลประมาณการพื้นที่รุกลามของไฟ">
+<meta property="og:type" content="website">
+<meta property="og:title" content="คอนโซลฝูงโดรนแนวไฟ · Firefront Swarm Console">
+<meta property="og:description" content="Prototype simulation: ฝูงโดรน 3–5 ลำ · แนวไฟลุกลาม (cellular automaton) · โซนความร้อน/หมอกควัน · แบตเตอรี่ · re-route แบบเรียลไทม์">
+<meta property="og:image" content="/preview.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🔥%3C/text%3E%3C/svg%3E">
+<style>html,body{margin:0}img{max-width:100%}</style>
+<title>คอนโซลฝูงโดรนแนวไฟ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
+<script src="/vendor/three.min.js"></script>
+<style>
+:root{
+  --ash-900:#131010; --ash-850:#191412; --ash-800:#1F1917;
+  --ash-700:#2A231E; --line:#3B322B; --line-soft:#2E2621;
+  --bone:#F3EADC; --muted:#A6988A; --dim:#7A6E63;
+  --teal:#59B7B0; --teal-dim:#2E6C69;
+  --fire:#FF6E2C; --heat:#E23B2A; --smoke:#9C958C; --safe:#93C46E; --warn:#EDB44B;
+  --mono:"IBM Plex Mono","SFMono-Regular",Menlo,monospace;
+  --sans:"IBM Plex Sans Thai","IBM Plex Sans",-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ash-900); color:var(--bone);
+  font-family:var(--sans); font-size:13px; line-height:1.5;
+  height:100vh; overflow:hidden;
+}
+#app{display:grid; grid-template-rows:auto 1fr; height:100vh}
+
+/* ---------- top bar ---------- */
+#topbar{
+  display:flex; align-items:center; gap:18px; padding:9px 16px;
+  background:linear-gradient(180deg,#1D1714,#171211);
+  border-bottom:1px solid var(--line);
+}
+#brand{display:flex; align-items:baseline; gap:10px; min-width:0}
+#brand b{font-weight:700; font-size:14.5px; letter-spacing:.2px}
+#brand span{font-size:11px; color:var(--dim); font-family:var(--mono); text-transform:uppercase; letter-spacing:.09em}
+.tb-spacer{flex:1}
+.clock{font-family:var(--mono); font-size:16px; font-weight:500; letter-spacing:.04em; font-variant-numeric:tabular-nums}
+.clock small{font-size:10px; color:var(--dim); display:block; letter-spacing:.1em}
+.pill{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase;
+  padding:3px 8px; border:1px solid var(--line); border-radius:2px; color:var(--muted); white-space:nowrap;
+}
+.pill.on{color:var(--teal); border-color:var(--teal-dim); background:rgba(89,183,176,.09)}
+.pill.alarm{color:var(--heat); border-color:#5C2A22; background:rgba(226,59,42,.12)}
+
+/* ---------- shell ---------- */
+#shell{display:grid; grid-template-columns:262px minmax(0,1fr) 306px; min-height:0}
+.rail{
+  background:var(--ash-850); overflow-y:auto; min-height:0;
+  display:flex; flex-direction:column;
+}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line)}
+.rail::-webkit-scrollbar{width:8px}
+.rail::-webkit-scrollbar-thumb{background:#332B25; border-radius:0}
+.rail::-webkit-scrollbar-track{background:transparent}
+
+.sec{padding:13px 14px; border-bottom:1px solid var(--line-soft)}
+.sec-h{
+  font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--dim); margin:0 0 10px; display:flex; align-items:center; gap:7px;
+}
+.sec-h::after{content:""; flex:1; height:1px; background:var(--line-soft)}
+
+/* controls */
+.ctrl{margin-bottom:12px}
+.ctrl:last-child{margin-bottom:0}
+.ctrl-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px}
+.ctrl-top label{font-size:12px; color:var(--bone)}
+.ctrl-val{font-family:var(--mono); font-size:12px; color:var(--teal); font-variant-numeric:tabular-nums}
+input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:3px; background:#3A312A; border-radius:2px; outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
+  background:var(--bone); border:2px solid var(--ash-850); cursor:pointer; box-shadow:0 0 0 1px var(--teal-dim);
+}
+input[type=range]::-moz-range-thumb{
+  width:11px; height:11px; border-radius:50%; background:var(--bone); border:2px solid var(--ash-850); cursor:pointer;
+}
+input[type=range]:focus-visible{box-shadow:0 0 0 2px var(--teal)}
+.btnrow{display:flex; gap:6px; flex-wrap:wrap}
+button{
+  font-family:var(--sans); font-size:12px; color:var(--bone); background:var(--ash-700);
+  border:1px solid var(--line); border-radius:3px; padding:6px 10px; cursor:pointer; transition:.13s;
+}
+button:hover{background:#342B24; border-color:#4A3E35}
+button:focus-visible{outline:2px solid var(--teal); outline-offset:1px}
+button.primary{background:rgba(89,183,176,.14); border-color:var(--teal-dim); color:#BFEDE9}
+button.primary:hover{background:rgba(89,183,176,.22)}
+button.seg{flex:1; padding:5px 4px; font-family:var(--mono); font-size:11px; letter-spacing:.04em}
+button.seg.active{background:rgba(89,183,176,.16); border-color:var(--teal-dim); color:#BFEDE9}
+button.danger.active{background:rgba(226,59,42,.16); border-color:#5C2A22; color:#F0A99F}
+
+.toggle{display:flex; align-items:flex-start; gap:9px; cursor:pointer; padding:6px 0}
+.toggle input{margin:2px 0 0; accent-color:var(--teal); width:14px; height:14px}
+.toggle .t-txt{flex:1}
+.toggle .t-txt b{display:block; font-weight:500; font-size:12px}
+.toggle .t-txt i{display:block; font-style:normal; font-size:11px; color:var(--dim); line-height:1.4}
+
+/* ---------- viewport ---------- */
+#view{position:relative; min-width:0; background:#0E0B0A; overflow:hidden}
+#gl{display:block; width:100%; height:100%}
+.overlay{position:absolute; pointer-events:none}
+.panel{
+  background:rgba(22,18,16,.82); border:1px solid var(--line);
+  border-radius:3px; backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+}
+#mapwrap{left:14px; bottom:14px; padding:9px 9px 7px; pointer-events:auto}
+#mapwrap .maphead{display:flex; align-items:center; justify-content:space-between; margin-bottom:7px; gap:12px}
+#mapwrap .maphead span{font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--dim)}
+#map2d{display:block; width:246px; height:246px; border:1px solid var(--line-soft); image-rendering:pixelated}
+.layers{display:flex; gap:4px; margin-top:7px}
+.layers button{padding:3px 6px; font-size:10.5px; font-family:var(--mono); letter-spacing:.03em}
+.layers button.active{background:rgba(89,183,176,.16); border-color:var(--teal-dim); color:#BFEDE9}
+.mapscale{display:flex; align-items:center; gap:6px; margin-top:6px; font-family:var(--mono); font-size:9.5px; color:var(--dim)}
+.mapscale .bar{width:62px; height:1px; background:var(--muted); position:relative}
+.mapscale .bar::before,.mapscale .bar::after{content:""; position:absolute; top:-3px; width:1px; height:7px; background:var(--muted)}
+.mapscale .bar::before{left:0} .mapscale .bar::after{right:0}
+
+#camrow{right:14px; top:14px; display:flex; gap:5px; pointer-events:auto}
+#camrow button{font-family:var(--mono); font-size:10.5px; letter-spacing:.05em; background:rgba(22,18,16,.82); backdrop-filter:blur(9px)}
+#camrow button.active{background:rgba(89,183,176,.2); border-color:var(--teal-dim); color:#BFEDE9}
+
+#log{
+  left:292px; bottom:14px; width:min(430px,calc(100% - 320px)); padding:8px 10px;
+}
+#log .lh{font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--dim); margin-bottom:5px}
+#logrows{display:flex; flex-direction:column-reverse; gap:2px; max-height:104px; overflow:hidden}
+.logrow{display:flex; gap:8px; font-size:11.5px; align-items:baseline}
+.logrow time{font-family:var(--mono); font-size:10.5px; color:var(--dim); flex:none; font-variant-numeric:tabular-nums}
+.logrow .tag{font-family:var(--mono); font-size:9.5px; letter-spacing:.06em; padding:0 4px; border:1px solid; border-radius:2px; flex:none}
+.tag.reroute{color:var(--teal); border-color:var(--teal-dim)}
+.tag.hazard{color:var(--heat); border-color:#5C2A22}
+.tag.energy{color:var(--warn); border-color:#5A472A}
+.tag.sys{color:var(--muted); border-color:var(--line)}
+.logrow p{margin:0; color:var(--muted)}
+
+#hint{left:14px; top:14px; padding:6px 9px; font-family:var(--mono); font-size:10px; color:var(--dim); letter-spacing:.04em}
+
+/* ---------- telemetry ---------- */
+.drone{border-bottom:1px solid var(--line-soft); padding:10px 14px}
+.d-top{display:flex; align-items:center; gap:8px; margin-bottom:7px}
+.d-dot{width:9px; height:9px; border-radius:50%; flex:none; box-shadow:0 0 7px currentColor; background:currentColor}
+.d-id{font-family:var(--mono); font-size:12px; font-weight:600; letter-spacing:.06em}
+.d-state{font-family:var(--mono); font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--dim); margin-left:auto}
+.batt{height:7px; background:#2A231E; border:1px solid var(--line-soft); border-radius:2px; position:relative; overflow:hidden}
+.batt i{position:absolute; inset:0 auto 0 0; display:block; background:var(--safe); transition:width .25s linear}
+.batt u{position:absolute; top:-2px; bottom:-2px; width:1px; background:var(--warn); opacity:.85}
+.d-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:7px}
+.d-stats div{font-family:var(--mono); font-size:10.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+.d-stats div b{display:block; color:var(--dim); font-size:9px; letter-spacing:.08em; font-weight:400; text-transform:uppercase}
+
+/* metrics */
+.mrow{display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:6px 0; border-bottom:1px dotted var(--line-soft)}
+.mrow:last-child{border-bottom:none}
+.mrow .mk{font-size:11.5px; color:var(--muted); line-height:1.35}
+.mrow .mk small{display:block; font-family:var(--mono); font-size:9px; color:var(--dim); letter-spacing:.06em; text-transform:uppercase}
+.mrow .mv{font-family:var(--mono); font-size:15px; font-variant-numeric:tabular-nums; white-space:nowrap; flex:none}
+.mv.good{color:var(--safe)} .mv.warn{color:var(--warn)} .mv.bad{color:var(--heat)} .mv.plain{color:var(--bone)}
+#trend{display:block; width:100%; height:56px; margin-top:8px; border:1px solid var(--line-soft); border-radius:2px; background:#171310}
+.legend{display:flex; gap:12px; margin-top:5px; font-family:var(--mono); font-size:9.5px; color:var(--dim)}
+.legend i{display:inline-block; width:9px; height:2px; vertical-align:middle; margin-right:4px}
+
+table.cmp{width:100%; border-collapse:collapse; font-family:var(--mono); font-size:10.5px; font-variant-numeric:tabular-nums}
+table.cmp th{font-weight:500; color:var(--dim); text-align:right; padding:4px 3px; border-bottom:1px solid var(--line-soft); font-size:9.5px; letter-spacing:.06em}
+table.cmp th:first-child{text-align:left}
+table.cmp td{padding:4px 3px; text-align:right; color:var(--muted); border-bottom:1px dotted var(--line-soft)}
+table.cmp td:first-child{text-align:left; color:var(--bone); font-family:var(--sans); font-size:11px}
+table.cmp .empty{color:var(--dim)}
+
+.note{font-size:11px; color:var(--dim); line-height:1.5; margin:8px 0 0}
+.note code{font-family:var(--mono); font-size:10.5px; color:var(--muted)}
+
+@media (max-width:1080px){
+  body{overflow:auto; height:auto}
+  #app{height:auto}
+  #shell{grid-template-columns:1fr}
+  #view{height:62vh; min-height:420px}
+  #left,#right{border:none; border-top:1px solid var(--line)}
+  #log{display:none}
+  #mapwrap{bottom:10px; left:10px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div id="brand">
+      <b>คอนโซลฝูงโดรนแนวไฟ</b>
+      <span>Firefront Swarm Console · R&amp;D Prototype</span>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="pill" id="pillMode">โหมด: พยากรณ์การลุกลาม</div>
+    <div class="pill" id="pillComm">COMM 5/5</div>
+    <div class="pill" id="pillAlarm">แนวไฟ 0 เซลล์</div>
+    <div class="clock"><small>MISSION T+</small><span id="clock">00:00</span></div>
+  </div>
+
+  <div id="shell">
+    <!-- ============ LEFT RAIL ============ -->
+    <div class="rail" id="left">
+      <div class="sec">
+        <h3 class="sec-h">การควบคุมภารกิจ</h3>
+        <div class="btnrow" style="margin-bottom:9px">
+          <button class="primary" id="btnPlay" style="flex:1">⏸ หยุดชั่วคราว</button>
+          <button id="btnReset">รีเซ็ต</button>
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>ความเร็วจำลอง</label></div>
+          <div class="btnrow">
+            <button class="seg" data-speed="1">1×</button>
+            <button class="seg active" data-speed="2">2×</button>
+            <button class="seg" data-speed="4">4×</button>
+            <button class="seg" data-speed="8">8×</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-h">พารามิเตอร์ฝูงโดรน</h3>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>จำนวนโดรน</label><span class="ctrl-val" id="vN">5 ลำ</span></div>
+          <input type="range" id="sN" min="3" max="5" step="1" value="5">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>เกณฑ์พลังงานสำรอง</label><span class="ctrl-val" id="vRes">25%</span></div>
+          <input type="range" id="sRes" min="10" max="40" step="1" value="25">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>รัศมีเซ็นเซอร์</label><span class="ctrl-val" id="vSens">160 ม.</span></div>
+          <input type="range" id="sSens" min="90" max="260" step="10" value="160">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>ระยะสื่อสารระหว่างลำ</label><span class="ctrl-val" id="vComm">900 ม.</span></div>
+          <input type="range" id="sComm" min="400" max="2400" step="50" value="900">
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-h">สภาพแวดล้อมไฟป่า</h3>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>ความเร็วลม</label><span class="ctrl-val" id="vWind">7.0 ม./วิ</span></div>
+          <input type="range" id="sWind" min="0" max="16" step="0.5" value="7">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>ทิศทางลม</label><span class="ctrl-val" id="vDir">045°</span></div>
+          <input type="range" id="sDir" min="0" max="355" step="5" value="45">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>อัตราการลุกลาม</label><span class="ctrl-val" id="vRate">1.00×</span></div>
+          <input type="range" id="sRate" min="0.4" max="2.2" step="0.05" value="1">
+        </div>
+        <div class="ctrl">
+          <div class="ctrl-top"><label>ความหนาแน่นหมอกควัน</label><span class="ctrl-val" id="vSmoke">1.00×</span></div>
+          <input type="range" id="sSmoke" min="0.3" max="2.5" step="0.1" value="1">
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-h">โมเดลวางเส้นทาง</h3>
+        <label class="toggle">
+          <input type="checkbox" id="cPred" checked>
+          <span class="t-txt"><b>โมดูลประมาณการพื้นที่รุกลาม</b><i>คาดการณ์แนวไฟล่วงหน้า 90 วินาที แล้วหลบล่วงหน้า — ปิดเพื่อรันแบบ baseline</i></span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="cCoop" checked>
+          <span class="t-txt"><b>ประสานงานฝูงแบบกระจายศูนย์</b><i>แชร์ belief และตำแหน่งในระยะสื่อสาร ลดการสำรวจซ้ำซ้อน</i></span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="cEnergy" checked>
+          <span class="t-txt"><b>โมดูลจัดการพลังงาน</b><i>บังคับกลับฐานเมื่อพลังงานเหลือต่ำกว่าเกณฑ์สำรอง</i></span>
+        </label>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-h">ชั้นข้อมูลในฉาก 3D</h3>
+        <div class="btnrow">
+          <button class="seg active" data-layer3d="hazard">โซนความร้อน</button>
+          <button class="seg active" data-layer3d="smoke">ควัน</button>
+        </div>
+        <div class="btnrow" style="margin-top:6px">
+          <button class="seg active" data-layer3d="paths">เส้นทาง</button>
+          <button class="seg active" data-layer3d="sensor">กรวยเซ็นเซอร์</button>
+        </div>
+        <p class="note">ลากเมาส์เพื่อหมุนกล้อง · ล้อเลื่อนเพื่อซูม · คลิกขวาลากเพื่อเลื่อน</p>
+      </div>
+    </div>
+
+    <!-- ============ VIEWPORT ============ -->
+    <div id="view">
+      <canvas id="gl"></canvas>
+
+      <div class="overlay panel" id="hint">ภูมิประเทศจำลอง 2.4 × 2.4 กม. · กริด 60 × 60 เซลล์ (40 ม./เซลล์)</div>
+
+      <div class="overlay" id="camrow">
+        <button class="active" data-cam="orbit">มุมกว้าง</button>
+        <button data-cam="follow">ตามโดรน</button>
+        <button data-cam="front">แนวไฟ</button>
+        <button data-cam="top">แผนที่</button>
+      </div>
+
+      <div class="overlay panel" id="mapwrap">
+        <div class="maphead">
+          <span>แผนที่ไฟป่า 2D</span>
+          <span id="mapinfo">— </span>
+        </div>
+        <canvas id="map2d" width="246" height="246"></canvas>
+        <div class="layers">
+          <button class="active" data-layer="fire">ไฟ</button>
+          <button class="active" data-layer="smoke">ควัน</button>
+          <button data-layer="heat">ความร้อน</button>
+          <button data-layer="belief">Belief</button>
+          <button class="active" data-layer="track">เส้นทาง</button>
+        </div>
+        <div class="mapscale"><span class="bar"></span><span>500 ม.</span><span style="margin-left:auto" id="windlabel">ลม 045° 7.0 ม./วิ</span></div>
+      </div>
+
+      <div class="overlay panel" id="log">
+        <div class="lh">บันทึกเหตุการณ์ปฏิบัติการ</div>
+        <div id="logrows"></div>
+      </div>
+    </div>
+
+    <!-- ============ RIGHT RAIL ============ -->
+    <div class="rail" id="right">
+      <div class="sec" style="padding-bottom:6px">
+        <h3 class="sec-h">ตัวชี้วัดตามบทความ</h3>
+        <div id="metrics"></div>
+        <canvas id="trend" width="560" height="112"></canvas>
+        <div class="legend">
+          <span><i style="background:#59B7B0"></i>สัดส่วนไฟที่ตรวจพบ</span>
+          <span><i style="background:#EDB44B"></i>พลังงานเฉลี่ย</span>
+          <span><i style="background:#E23B2A"></i>พื้นที่ไฟ</span>
+        </div>
+      </div>
+
+      <div class="sec" style="padding:10px 0 0">
+        <h3 class="sec-h" style="padding:0 14px">สถานะรายลำ</h3>
+        <div id="drones"></div>
+      </div>
+
+      <div class="sec">
+        <h3 class="sec-h">ตารางเปรียบเทียบ baseline</h3>
+        <table class="cmp">
+          <thead><tr><th>ตัวชี้วัด</th><th>มีโมเดลลุกลาม</th><th>Baseline</th></tr></thead>
+          <tbody id="cmpbody"></tbody>
+        </table>
+        <div class="btnrow" style="margin-top:9px">
+          <button id="btnSnap" style="flex:1">บันทึกผลรันปัจจุบัน</button>
+          <button id="btnClearSnap">ล้าง</button>
+        </div>
+        <p class="note">บันทึกผลของรันปัจจุบันลงคอลัมน์ตามโหมดที่เปิดอยู่ เพื่อใช้เป็นตารางเปรียบเทียบในหัวข้อ 4 ผลการวิจัย</p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+/* =====================================================================
+   คอนโซลฝูงโดรนแนวไฟ — Firefront Swarm Console
+   Prototype simulation for: "โมเดลการวางเส้นทางแบบเรียลไทม์สำหรับฝูงโดรน
+   สำรวจไฟป่าภายใต้ข้อจำกัดด้านพลังงานและสภาพแวดล้อมหมอกควันและความร้อน"
+   4 modules: (1) belief + fire-spread CA  (2) hazard cost map (heat/smoke)
+              (3) energy management        (4) decentralised swarm planning
+   ===================================================================== */
+(function () {
+'use strict';
+
+/* ------------------------- constants ------------------------- */
+var G = 60;                 // grid cells per side
+var CELL = 40;              // metres per cell
+var WORLD = G * CELL;       // 2400 m
+var HALF = WORLD / 2;
+var MAXH = 210;             // terrain relief (m)
+var BATT_WH = 300;          // Wh per drone battery
+var CRUISE = 18;            // m/s
+var DRAIN = 0.112;          // % per second at cruise
+var CHARGE = 5.0;           // % per second at base (battery swap)
+var AGL = 95;               // nominal altitude above ground (m)
+var FIRE_STEP = 0.5;        // CA step (sim seconds)
+var SPREAD_K = 0.0085;      // base ignition probability coefficient
+var BURN_K = 0.007;         // fuel consumption per second while burning
+
+/* ------------------------- rng / noise ------------------------- */
+function mulberry(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+var rnd = mulberry(20260905);
+
+function makeNoise(seed) {
+  var r = mulberry(seed), P = new Float32Array(256 * 256);
+  for (var i = 0; i < P.length; i++) P[i] = r();
+  function v(x, y) {
+    var xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
+    var xf = x - Math.floor(x), yf = y - Math.floor(y);
+    var u = xf * xf * (3 - 2 * xf), w = yf * yf * (3 - 2 * yf);
+    var a = P[yi * 256 + xi], b = P[yi * 256 + ((xi + 1) & 255)];
+    var c = P[((yi + 1) & 255) * 256 + xi], d = P[((yi + 1) & 255) * 256 + ((xi + 1) & 255)];
+    return (a * (1 - u) + b * u) * (1 - w) + (c * (1 - u) + d * u) * w;
+  }
+  return function (x, y, oct) {
+    var s = 0, amp = 1, f = 1, norm = 0;
+    for (var o = 0; o < (oct || 4); o++) { s += v(x * f, y * f) * amp; norm += amp; amp *= 0.5; f *= 2.03; }
+    return s / norm;
+  };
+}
+
+var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+var lerp = function (a, b, t) { return a + (b - a) * t; };
+var idx = function (x, y) { return y * G + x; };
+var cellToWorld = function (x, y) { return { x: (x + 0.5) * CELL - HALF, z: (y + 0.5) * CELL - HALF }; };
+var worldToCellX = function (wx) { return clamp(Math.floor((wx + HALF) / CELL), 0, G - 1); };
+
+/* ------------------------- world state ------------------------- */
+var S = {
+  t: 0, running: true, speed: 2, seed: 20260905,
+  height: new Float32Array(G * G),
+  fuel: new Float32Array(G * G),
+  fuel0: new Float32Array(G * G),
+  state: new Uint8Array(G * G),      // 0 unburned · 1 burning · 2 burned
+  inten: new Float32Array(G * G),
+  heat: new Float32Array(G * G),
+  smoke: new Float32Array(G * G),
+  smokeB: new Float32Array(G * G),
+  belief: new Float32Array(G * G),
+  seen: new Float32Array(G * G),     // last observation time (-999 = never)
+  pred: new Float32Array(G * G),     // predicted encroachment risk
+  distFire: new Float32Array(G * G), // metres to nearest burning cell
+  everFire: new Uint8Array(G * G),
+  everDet: new Uint8Array(G * G),
+  tmpA: new Float32Array(G * G),
+  tmpB: new Float32Array(G * G),
+  burningList: [],
+  drones: [],
+  base: { x: -820, z: 860 },
+  wind: { speed: 7, dir: 45 },       // dir = direction wind blows TOWARD (deg, 0=north/-z)
+  params: { n: 5, reserve: 25, sensor: 160, comm: 900, rate: 1, smokeMul: 1 },
+  flags: { predict: true, coop: true, energy: true },
+  ev: [],
+  metrics: {
+    detect: 0, meanDist: 0, energyWh: 0, survival: 100, surveyed: 0,
+    t80: null, danger: 0, reroute: 0, fireArea: 0, lost: 0, commLinks: 0
+  },
+  trend: [],
+  snaps: { model: null, base: null },
+  acc: 0, fireAcc: 0, predAcc: 0, planAcc: 0, obsAcc: 0
+};
+window.__SIM = S;
+
+function windVec() {
+  var a = S.wind.dir * Math.PI / 180;
+  return { x: Math.sin(a), y: -Math.cos(a) };   // grid space (y = +south)
+}
+
+/* ------------------------- terrain + fuel ------------------------- */
+function buildTerrain(seed) {
+  var n = makeNoise(seed), nr = makeNoise(seed + 991);
+  for (var y = 0; y < G; y++) for (var x = 0; x < G; x++) {
+    var u = x / G, v = y / G;
+    var h = n(u * 3.1, v * 3.1, 5);
+    var ridge = 1 - Math.abs(n(u * 1.7 + 5, v * 1.7 + 5, 3) - 0.5) * 2;
+    h = h * 0.62 + ridge * 0.38;
+    h = Math.pow(clamp(h, 0, 1), 1.45);
+    var i = idx(x, y);
+    S.height[i] = h * MAXH;
+
+    // fuel: dense forest mid-slope; bare rock high up; a creek line = firebreak
+    var f = 0.55 + 0.45 * nr(u * 5.2, v * 5.2, 4);
+    var alt = S.height[i] / MAXH;
+    f *= clamp(1.25 - alt * 1.35, 0, 1);
+    var creek = Math.abs(nr(u * 1.35 + 11, v * 1.35 + 3, 2) - 0.5);
+    if (creek < 0.028) f *= 0.05;                  // ลำห้วย = แนวกันไฟธรรมชาติ
+    if (alt > 0.86) f *= 0.15;                     // สันเขาหินโล่ง
+    S.fuel[i] = S.fuel0[i] = clamp(f, 0, 1);
+  }
+}
+function heightAt(wx, wz) {                        // bilinear terrain sample
+  var fx = clamp((wx + HALF) / CELL - 0.5, 0, G - 1.001);
+  var fy = clamp((wz + HALF) / CELL - 0.5, 0, G - 1.001);
+  var x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+  var x1 = Math.min(x0 + 1, G - 1), y1 = Math.min(y0 + 1, G - 1);
+  var a = S.height[idx(x0, y0)], b = S.height[idx(x1, y0)];
+  var c = S.height[idx(x0, y1)], d = S.height[idx(x1, y1)];
+  return lerp(lerp(a, b, tx), lerp(c, d, tx), ty);
+}
+function sampleField(F, wx, wz) {
+  var fx = clamp((wx + HALF) / CELL - 0.5, 0, G - 1.001);
+  var fy = clamp((wz + HALF) / CELL - 0.5, 0, G - 1.001);
+  var x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+  var x1 = Math.min(x0 + 1, G - 1), y1 = Math.min(y0 + 1, G - 1);
+  return lerp(lerp(F[idx(x0, y0)], F[idx(x1, y0)], tx),
+              lerp(F[idx(x0, y1)], F[idx(x1, y1)], tx), ty);
+}
+
+/* ------------------------- fire cellular automaton ------------------------- */
+var NB = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+
+function ignite(x, y) {
+  var i = idx(x, y);
+  if (S.state[i] !== 0 || S.fuel[i] < 0.08) return false;
+  S.state[i] = 1; S.inten[i] = 0.15; S.everFire[i] = 1;
+  S.burningList.push(i);
+  return true;
+}
+
+function stepFire(dt) {
+  var w = windVec(), ws = S.wind.speed / 16, rate = S.params.rate;
+  var next = [];
+  for (var k = 0; k < S.burningList.length; k++) {
+    var i = S.burningList[k];
+    if (S.state[i] !== 1) continue;
+    var x = i % G, y = (i / G) | 0;
+    S.inten[i] = Math.min(1, S.inten[i] + 1.6 * dt);
+    S.fuel[i] -= BURN_K * dt * (0.6 + 0.4 * rate);
+    if (S.fuel[i] <= 0) { S.fuel[i] = 0; S.state[i] = 2; S.inten[i] = 0; continue; }
+    next.push(i);
+    if (S.inten[i] < 0.35) continue;                       // ต้องลุกเต็มที่ก่อนจึงลาม
+    for (var m = 0; m < 8; m++) {
+      var nx = x + NB[m][0], ny = y + NB[m][1];
+      if (nx < 0 || ny < 0 || nx >= G || ny >= G) continue;
+      var j = idx(nx, ny);
+      if (S.state[j] !== 0 || S.fuel[j] < 0.08) continue;
+      var len = Math.hypot(NB[m][0], NB[m][1]);
+      var dirx = NB[m][0] / len, diry = NB[m][1] / len;
+      var align = dirx * w.x + diry * w.y;                 // downwind alignment
+      var wf = Math.exp(2.05 * ws * align);                // wind factor
+      var slope = (S.height[j] - S.height[i]) / (CELL * len);
+      var sf = Math.exp(1.9 * clamp(slope, -0.35, 0.35));  // uphill spreads faster
+      var p = SPREAD_K * rate * S.fuel[j] * wf * sf * dt / len;
+      if (rnd() < p) {
+        S.state[j] = 1; S.inten[j] = 0.05; S.everFire[j] = 1; next.push(j);
+      }
+    }
+  }
+  S.burningList = next;
+}
+
+/* ------------------------- hazard fields ------------------------- */
+function blur(src, dst, r) {
+  var tmp = S.tmpA, x, y, i, s, c, k;
+  for (y = 0; y < G; y++) for (x = 0; x < G; x++) {
+    s = 0; c = 0;
+    for (k = -r; k <= r; k++) { var xx = x + k; if (xx < 0 || xx >= G) continue; s += src[idx(xx, y)]; c++; }
+    tmp[idx(x, y)] = s / c;
+  }
+  for (y = 0; y < G; y++) for (x = 0; x < G; x++) {
+    s = 0; c = 0;
+    for (k = -r; k <= r; k++) { var yy = y + k; if (yy < 0 || yy >= G) continue; s += tmp[idx(x, yy)]; c++; }
+    dst[idx(x, y)] = s / c;
+  }
+}
+
+/* ชั้นความร้อน: ความเข้มการแผ่รังสีลดลงตามระยะห่างจากแนวไฟ (ต้องเรียกหลัง updateDistField) */
+function updateHeat() {
+  var A = S.tmpB, i;
+  for (i = 0; i < G * G; i++) A[i] = S.state[i] === 1 ? S.inten[i] : 0;
+  blur(A, S.heat, 1);
+  for (i = 0; i < G * G; i++) {
+    var dens = clamp(S.heat[i] * 2.2, 0, 1);
+    S.heat[i] = clamp((0.90 + 1.55 * dens) * Math.exp(-S.distFire[i] / 170), 0, 1.6);
+  }
+}
+
+function updateSmoke(dt) {
+  var w = windVec(), adv = (S.wind.speed * dt) / CELL, dst = S.smokeB;
+  for (var y = 0; y < G; y++) for (var x = 0; x < G; x++) {
+    var sx = clamp(x - w.x * adv, 0, G - 1.001), sy = clamp(y - w.y * adv, 0, G - 1.001);
+    var x0 = Math.floor(sx), y0 = Math.floor(sy), tx = sx - x0, ty = sy - y0;
+    var x1 = Math.min(x0 + 1, G - 1), y1 = Math.min(y0 + 1, G - 1);
+    var v = lerp(lerp(S.smoke[idx(x0, y0)], S.smoke[idx(x1, y0)], tx),
+                 lerp(S.smoke[idx(x0, y1)], S.smoke[idx(x1, y1)], tx), ty);
+    var i = idx(x, y);
+    var emit = S.state[i] === 1 ? S.inten[i] * 0.75 * S.params.smokeMul : 0;
+    dst[i] = clamp(v * (1 - 0.13 * dt) + emit * dt, 0, 1.6);
+  }
+  blur(dst, S.smoke, 1);
+}
+
+/* ประมาณการพื้นที่รุกลาม — probabilistic forward sweep ~90 s ahead */
+function updatePrediction() {
+  var P = S.pred, w = windVec(), ws = S.wind.speed / 16, i;
+  for (i = 0; i < G * G; i++) P[i] = S.state[i] === 1 ? 1 : 0;
+  var horizon = 5;
+  for (var it = 0; it < horizon; it++) {
+    var C = S.tmpB; C.set(P);
+    for (var y = 0; y < G; y++) for (var x = 0; x < G; x++) {
+      var j = idx(x, y);
+      if (S.fuel[j] < 0.08 || S.state[j] === 2) { P[j] = Math.max(P[j] * 0.5, 0); continue; }
+      var best = C[j];
+      for (var m = 0; m < 8; m++) {
+        var nx = x - NB[m][0], ny = y - NB[m][1];
+        if (nx < 0 || ny < 0 || nx >= G || ny >= G) continue;
+        var len = Math.hypot(NB[m][0], NB[m][1]);
+        var align = (NB[m][0] / len) * w.x + (NB[m][1] / len) * w.y;
+        var slope = (S.height[j] - S.height[idx(nx, ny)]) / (CELL * len);
+        var g = 0.62 * Math.exp(1.1 * ws * align) * Math.exp(1.4 * clamp(slope, -0.6, 0.6)) * S.fuel[j];
+        var v = C[idx(nx, ny)] * clamp(g, 0, 0.97) / len;
+        if (v > best) best = v;
+      }
+      P[j] = best;
+    }
+  }
+  blur(P, P, 1);
+}
+
+/* distance-to-fireline field (multi-source BFS, metres) */
+function updateDistField() {
+  var D = S.distFire, q = [], i;
+  for (i = 0; i < G * G; i++) { if (S.state[i] === 1) { D[i] = 0; q.push(i); } else D[i] = 1e5; }
+  if (!q.length) { for (i = 0; i < G * G; i++) D[i] = 4000; return; }
+  var head = 0;
+  while (head < q.length) {
+    var c = q[head++], x = c % G, y = (c / G) | 0;
+    for (var m = 0; m < 8; m++) {
+      var nx = x + NB[m][0], ny = y + NB[m][1];
+      if (nx < 0 || ny < 0 || nx >= G || ny >= G) continue;
+      var j = idx(nx, ny), nd = D[c] + CELL * Math.hypot(NB[m][0], NB[m][1]);
+      if (nd < D[j] - 0.5) { D[j] = nd; q.push(j); }
+    }
+  }
+}
+
+/* hazard cost at a world position (โมดูลที่ 2) */
+function hazardAt(wx, wz) {
+  var h = sampleField(S.heat, wx, wz) * 1.00 + sampleField(S.smoke, wx, wz) * 0.22;
+  if (S.flags.predict) h += sampleField(S.pred, wx, wz) * 0.60;
+  return h;
+}
+/* ความร้อนที่โดรนได้รับจริง — ลดลงตามระดับความสูงเหนือพื้น (AGL) */
+function exposureAt(wx, wz, agl) {
+  return sampleField(S.heat, wx, wz) * clamp(1.55 - agl / 170, 0.12, 1.0);
+}
+function pathHazard(ax, az, bx, bz, n) {
+  var mx = 0, sum = 0;
+  for (var k = 1; k <= n; k++) {
+    var t = k / n, v = hazardAt(lerp(ax, bx, t), lerp(az, bz, t));
+    if (v > mx) mx = v; sum += v;
+  }
+  return { max: mx, mean: sum / n };
+}
+window.__hazardAt = hazardAt;
+/* ============================ ฝูงโดรน (โมดูล 3 + 4) ============================ */
+var DCOL = ['#59B7B0', '#93C46E', '#EDB44B', '#C79BE8', '#6FA0E0'];
+
+function logEv(tag, text) {
+  S.ev.push({ t: S.t, tag: tag, text: text });
+  if (S.ev.length > 40) S.ev.shift();
+  S.evDirty = true;
+}
+function fmtT(t) {
+  var m = Math.floor(t / 60), s = Math.floor(t % 60);
+  return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function makeDrone(k) {
+  var a = k / 5 * Math.PI * 2;
+  return {
+    id: k, name: 'UAV-' + (k + 1), col: DCOL[k % 5],
+    x: S.base.x + Math.cos(a) * 60, z: S.base.z + Math.sin(a) * 60,
+    y: 0, hdg: 0, spd: 0,
+    batt: 100 - k * 7, health: 1, state: 'SURVEY',   // เหลื่อมรอบเปลี่ยนแบตเตอรี่
+    tx: S.base.x, tz: S.base.z, ti: -1,
+    energyUsed: 0, linked: true, inDanger: false, reroutes: 0,
+    obs: new Map(), trail: [], detects: 0, planT: -99
+  };
+}
+function spawnDrones(n) {
+  S.drones = [];
+  for (var k = 0; k < n; k++) {
+    var d = makeDrone(k);
+    d.y = heightAt(d.x, d.z) + AGL;
+    S.drones.push(d);
+    plan(d, true);
+  }
+}
+
+function beliefFor(d, i) { return d.obs.has(i) ? d.obs.get(i) : S.belief[i]; }
+
+/* --------- โมดูลที่ 4: การวางเส้นทางแบบกระจายศูนย์ --------- */
+var W_INFO = 6.0, W_HAZ_C = 1.15, W_HAZ_P = 0.95, W_E = 0.75;
+var fpCache = { r: -1, off: [] };
+function footprint() {                                    // เซลล์ที่เซ็นเซอร์ครอบคลุมจากจุดหนึ่ง
+  var R = S.params.sensor;
+  if (fpCache.r === R) return fpCache.off;
+  var r = Math.floor(R / CELL), off = [];
+  for (var dy = -r; dy <= r; dy++) for (var dx = -r; dx <= r; dx++)
+    if ((dx * dx + dy * dy) * CELL * CELL <= R * R) off.push([dx, dy]);
+  fpCache.r = R; fpCache.off = off; return off;
+}
+
+function infoGain(d, cx, cy) {
+  var off = footprint(), sum = 0, n = 0;
+  for (var k = 0; k < off.length; k++) {
+    var x = cx + off[k][0], y = cy + off[k][1];
+    n++;
+    if (x < 0 || y < 0 || x >= G || y >= G) continue;
+    var j = idx(x, y);
+    var stale = clamp((S.t - S.seen[j]) / 45, 0, 1);
+    var like = 0.22 + 1.5 * beliefFor(d, j) + 0.50 * clamp(S.smoke[j], 0, 1.2) +
+               (S.flags.predict ? 1.5 * S.pred[j] : 0);
+    sum += like * (0.35 + 0.65 * stale);      // ติดตามแนวไฟต่อเนื่อง + สำรวจพื้นที่ที่ข้อมูลเก่า
+  }
+  return n ? sum / n : 0;
+}
+
+function candidateScore(d, i) {
+  var x = i % G, y = (i / G) | 0, p = cellToWorld(x, y);
+  var dgo = Math.hypot(p.x - d.x, p.z - d.z);
+  if (dgo < 130) return null;                                  // ใกล้เกินไป ไม่คุ้มบิน
+  var dback = Math.hypot(p.x - S.base.x, p.z - S.base.z);
+  var need = ((dgo + dback) / CRUISE) * DRAIN * 1.15 + 2;
+  if (S.flags.energy && d.batt - need < S.params.reserve) return null;   // โมดูลที่ 3
+
+  var hc = hazardAt(p.x, p.z);
+  if (hc > 1.35) return null;                                  // จุดลอยตัวอันตรายเกินเกณฑ์
+  var ph = pathHazard(d.x, d.z, p.x, p.z, 6);
+  if (ph.max > 1.55) return null;
+  var info = infoGain(d, x, y);
+  var risk = W_HAZ_C * hc + W_HAZ_P * ph.max;
+  var energy = W_E * (dgo / 1000);
+
+  var overlap = 0;
+  if (S.flags.coop) {
+    for (var k = 0; k < S.drones.length; k++) {
+      var o = S.drones[k];
+      if (o === d || o.state === 'LOST' || o.ti < 0) continue;
+      var q = cellToWorld(o.ti % G, (o.ti / G) | 0);
+      var dd = Math.hypot(q.x - p.x, q.z - p.z);
+      if (dd < 420) overlap += 1 - dd / 420;
+    }
+  }
+  return W_INFO * info - risk - energy - 1.3 * overlap;
+}
+
+function plan(d, force) {
+  if (d.state === 'LOST') return;
+  var best = -1e9, bi = -1, i, sc;
+  for (var k = 0; k < 70; k++) {                                // สุ่มสำรวจทั่วพื้นที่
+    i = (rnd() * G * G) | 0;
+    sc = candidateScore(d, i); if (sc !== null && sc > best) { best = sc; bi = i; }
+  }
+  for (k = 0; k < 50; k++) {                                    // เน้นบริเวณแนวไฟและแนวรุกลามที่คาดการณ์
+    i = (rnd() * G * G) | 0;
+    if (S.distFire[i] > 1400 && S.belief[i] < 0.4) continue;
+    sc = candidateScore(d, i); if (sc !== null && sc > best) { best = sc; bi = i; }
+  }
+  if (bi < 0) {                                                  // ไม่มีเป้าหมายที่ปลอดภัย/พลังงานพอ → กลับฐาน
+    if (d.state !== 'RETURN') { d.state = 'RETURN'; logEv('energy', d.name + ' ไม่มีเป้าหมายที่พลังงานเพียงพอ — กลับฐาน'); }
+    d.tx = S.base.x; d.tz = S.base.z; d.ti = -1; return;
+  }
+  var p = cellToWorld(bi % G, (bi / G) | 0);
+  d.tx = p.x; d.tz = p.z; d.ti = bi; d.planT = S.t;
+  if (force) d.state = 'SURVEY';
+}
+
+/* --------- โมดูลที่ 1: อัปเดต belief แบบเบย์จากการสังเกต --------- */
+function observe(d, dt) {
+  if (d.state === 'LOST') return;
+  var agl = Math.max(20, d.y - heightAt(d.x, d.z));
+  var R = S.params.sensor * clamp(agl / AGL, 0.7, 1.9), R2 = R * R;   // swath กว้างขึ้นเมื่อบินสูง
+  var altConf = clamp(1.28 - agl / 320, 0.45, 1);                     // แต่ความเชื่อมั่นลดลง
+  d.swath = R;
+  var cx = worldToCellX(d.x), cy = worldToCellX(d.z), r = Math.ceil(R / CELL);
+  for (var y = Math.max(0, cy - r); y <= Math.min(G - 1, cy + r); y++) {
+    for (var x = Math.max(0, cx - r); x <= Math.min(G - 1, cx + r); x++) {
+      var p = cellToWorld(x, y), dx = p.x - d.x, dz = p.z - d.z;
+      if (dx * dx + dz * dz > R2) continue;
+      var i = idx(x, y);
+      var pDet = 0.94 * Math.exp(-0.55 * S.smoke[i]) * altConf;  // หมอกควัน + ความสูงลดความน่าเชื่อถือ
+      var fpr = 0.03, actual = S.state[i] === 1;
+      var z = actual ? (rnd() < pDet) : (rnd() < fpr);
+      var b = beliefFor(d, i);
+      b = z ? (b * pDet) / (b * pDet + (1 - b) * fpr)
+            : (b * (1 - pDet)) / (b * (1 - pDet) + (1 - b) * (1 - fpr));
+      b = clamp(b, 0.002, 0.998);
+      if (d.linked || !S.flags.coop) { S.belief[i] = b; S.seen[i] = S.t; }
+      else { d.obs.set(i, b); if (d.obs.size > 6000) d.obs.clear(); }
+      if (z && actual && !S.everDet[i]) { S.everDet[i] = 1; d.detects++; }
+    }
+  }
+}
+
+function updateComms() {
+  var C = S.params.comm, n = S.drones.length, links = 0;
+  var reach = new Array(n).fill(false), queue = [];
+  for (var k = 0; k < n; k++) {
+    var d = S.drones[k]; if (d.state === 'LOST') continue;
+    if (Math.hypot(d.x - S.base.x, d.z - S.base.z) < C * 1.6) { reach[k] = true; queue.push(k); }
+  }
+  while (queue.length) {                                         // relay ผ่านเพื่อนร่วมฝูง
+    var a = S.drones[queue.pop()];
+    for (var j = 0; j < n; j++) {
+      var b = S.drones[j];
+      if (reach[j] || b.state === 'LOST') continue;
+      if (Math.hypot(a.x - b.x, a.z - b.z) < C) { reach[j] = true; queue.push(j); }
+    }
+  }
+  for (k = 0; k < n; k++) {
+    var dr = S.drones[k]; if (dr.state === 'LOST') continue;
+    var was = dr.linked; dr.linked = S.flags.coop ? reach[k] : true;
+    if (dr.linked) {
+      links++;
+      if (!was && dr.obs.size) {                                 // ซิงก์ belief ที่ค้างไว้
+        dr.obs.forEach(function (v, i) { S.belief[i] = v; S.seen[i] = S.t; });
+        logEv('sys', dr.name + ' กลับเข้าระยะสื่อสาร — ซิงก์ belief ' + dr.obs.size + ' เซลล์');
+        dr.obs.clear();
+      }
+    } else if (was) logEv('hazard', dr.name + ' หลุดระยะสื่อสาร — วางแผนด้วยข้อมูลของตนเอง');
+  }
+  S.metrics.commLinks = links;
+}
+
+/* --------- การเคลื่อนที่ พลังงาน และการเอาตัวรอด --------- */
+function stepDrones(dt) {
+  for (var k = 0; k < S.drones.length; k++) {
+    var d = S.drones[k];
+    if (d.state === 'LOST') { d.y = Math.max(heightAt(d.x, d.z) + 4, d.y - 55 * dt); continue; }
+
+    // โมดูลที่ 3 — ตรวจพลังงานคงเหลือเทียบระยะกลับฐาน
+    var dback = Math.hypot(d.x - S.base.x, d.z - S.base.z);
+    var needBack = (dback / CRUISE) * DRAIN * 1.20 + 1.5;
+    if (S.flags.energy && d.state === 'SURVEY' && d.batt - needBack <= S.params.reserve) {
+      d.state = 'RETURN'; d.tx = S.base.x; d.tz = S.base.z; d.ti = -1;
+      logEv('energy', d.name + ' พลังงานถึงเกณฑ์สำรอง ' + S.params.reserve + '% — กลับฐาน');
+    }
+
+    // เดินทางเข้าหาเป้าหมาย
+    var dx = d.tx - d.x, dz = d.tz - d.z, dist = Math.hypot(dx, dz);
+    if (d.state === 'CHARGE') {
+      d.batt = Math.min(100, d.batt + CHARGE * dt);
+      d.spd = 0;
+      if (d.batt >= 99.5) { d.state = 'SURVEY'; plan(d, true); logEv('energy', d.name + ' เปลี่ยนแบตเตอรี่เสร็จ — กลับเข้าภารกิจ'); }
+    } else {
+      if (dist < 45) {
+        if (d.state === 'RETURN') { d.state = 'CHARGE'; logEv('energy', d.name + ' ถึงฐาน — เปลี่ยนแบตเตอรี่'); }
+        else plan(d);
+      }
+      var sp = Math.min(CRUISE, dist / 1.2);
+      if (dist > 1) { d.x += dx / dist * sp * dt; d.z += dz / dist * sp * dt; d.hdg = Math.atan2(dx, dz); }
+      d.spd = sp;
+      var hz = hazardAt(d.x, d.z);
+      var gh = heightAt(d.x, d.z);
+      var tgtY = gh + AGL + clamp(hz, 0, 2.2) * 95;                   // ไต่ระดับหนีความร้อนแผ่รังสี
+      d.y += (tgtY - d.y) * Math.min(1, 1.1 * dt);
+      var aglNow = Math.max(20, d.y - gh);
+      var load = 0.72 + 0.28 * sp / CRUISE + 0.30 * clamp(aglNow / AGL - 1, 0, 1.4);
+      d.batt -= DRAIN * dt * load;
+      d.energyUsed += DRAIN * dt * load * BATT_WH / 100;
+    }
+
+    // อันตรายจากความร้อน (สะสมความเสียหาย) + การถอนตัวฉุกเฉิน
+    var heat = exposureAt(d.x, d.z, Math.max(20, d.y - heightAt(d.x, d.z)));
+    if (heat > 0.50 && d.state !== 'CHARGE') {
+      var gx = sampleField(S.distFire, d.x + 90, d.z) - sampleField(S.distFire, d.x - 90, d.z);
+      var gz = sampleField(S.distFire, d.x, d.z + 90) - sampleField(S.distFire, d.x, d.z - 90);
+      var gl = Math.hypot(gx, gz) || 1;
+      d.tx = clamp(d.x + gx / gl * 520, -HALF + 60, HALF - 60);
+      d.tz = clamp(d.z + gz / gl * 520, -HALF + 60, HALF - 60);
+      d.ti = -1;
+      if (!d.evading) { d.evading = true; d.lastRR = S.t; S.metrics.reroute++;
+        logEv('reroute', d.name + ' ถอนตัวฉุกเฉินออกจากแนวไฟ'); }
+    } else if (heat < 0.32 && d.evading) { d.evading = false; plan(d); }
+    if (heat > 0.55) {
+      if (!d.inDanger) { d.inDanger = true; S.metrics.danger++; logEv('hazard', d.name + ' เข้าเขตความร้อนสูง (' + heat.toFixed(2) + ')'); }
+      d.health -= (heat - 0.55) * 0.55 * dt;
+    } else if (heat < 0.4) d.inDanger = false;
+
+    if (d.health <= 0) {
+      d.state = 'LOST'; S.metrics.lost++;
+      logEv('hazard', d.name + ' สูญเสียจากความร้อนแนวไฟ');
+    }
+    if (d.batt <= 0) {
+      d.batt = 0; d.state = 'LOST'; S.metrics.lost++;
+      logEv('energy', d.name + ' พลังงานหมดกลางอากาศ — สูญเสีย');
+    }
+
+    // เส้นทางบิน (trail)
+    if (!d.trail.length || Math.hypot(d.x - d.trail[d.trail.length - 1].x, d.z - d.trail[d.trail.length - 1].z) > 22) {
+      d.trail.push({ x: d.x, y: d.y, z: d.z });
+      if (d.trail.length > 90) d.trail.shift();
+    }
+  }
+}
+
+/* --------- ตรวจเส้นทางแบบเรียลไทม์ → Re-route --------- */
+function checkReroute() {
+  for (var k = 0; k < S.drones.length; k++) {
+    var d = S.drones[k];
+    if (d.state !== 'SURVEY') continue;
+    if (S.t - (d.lastRR || -99) < 5) continue;
+    var ph = pathHazard(d.x, d.z, d.tx, d.tz, 7);
+    var dest = hazardAt(d.tx, d.tz);
+    if (ph.max > 1.55 || dest > 1.35) {
+      var oldi = d.ti;
+      plan(d);
+      if (d.ti !== oldi) {
+        d.reroutes++; S.metrics.reroute++; d.lastRR = S.t;
+        logEv('reroute', d.name + ' วางเส้นทางใหม่ — ต้นทุนอันตรายบนเส้นทางเดิม ' + ph.max.toFixed(2));
+      }
+    }
+  }
+}
+
+/* belief ของเซลล์ที่ไม่ได้สังเกตนาน — ไหลเข้าหาค่าที่โมเดลลุกลามคาดการณ์ */
+function driftBelief() {
+  for (var i = 0; i < G * G; i++) {
+    if (S.t - S.seen[i] < 45) continue;
+    var target = S.flags.predict ? clamp(S.pred[i], 0.04, 0.55) : 0.05;
+    S.belief[i] += (target - S.belief[i]) * 0.10;
+  }
+}
+
+/* --------- ตัวชี้วัดตามบทความ (ตัวแปรตาม 5 ตัว) --------- */
+function computeMetrics() {
+  var i, fireEver = 0, det = 0, seenN = 0, burning = 0, burned = 0, known = 0;
+  for (i = 0; i < G * G; i++) {
+    if (S.everFire[i]) { fireEver++; if (S.everDet[i]) det++; }
+    if (S.seen[i] > -900) seenN++;
+    if (S.state[i] === 1) { burning++; if (S.belief[i] > 0.6 && S.t - S.seen[i] < 60) known++; }
+    else if (S.state[i] === 2) burned++;
+  }
+  var m = S.metrics;
+  if (burning >= 8) m.detect += (known / burning * 100 - m.detect) * 0.12;          // EMA
+  m.detectCum = fireEver ? det / fireEver * 100 : 0;
+  m.surveyed = seenN / (G * G) * 100;
+  m.fireArea = burning; m.burnedArea = burned;     // 1 เซลล์ = 40×40 ม. = 1 ไร่พอดี
+  var alive = 0, sumD = 0, sumB = 0, e = 0;
+  for (var k = 0; k < S.drones.length; k++) {
+    var d = S.drones[k]; e += d.energyUsed;
+    if (d.state === 'LOST') continue;
+    alive++; sumB += d.batt;
+    sumD += Math.min(4000, sampleField(S.distFire, d.x, d.z));
+  }
+  m.meanDist = alive ? sumD / alive : 0;
+  m.energyWh = e;
+  m.survival = S.drones.length ? alive / S.drones.length * 100 : 0;
+  m.battAvg = alive ? sumB / alive : 0;
+  if (m.t80 === null && m.detect >= 80 && fireEver > 30) {
+    m.t80 = S.t;
+    logEv('sys', 'ครอบคลุมการตรวจพบแนวไฟ 80% ที่ T+' + fmtT(S.t));
+  }
+}
+
+/* --------- reset --------- */
+function resetSim(keepSeed) {
+  S.seed = keepSeed ? S.seed : (Math.random() * 1e9) | 0;
+  rnd = mulberry(S.seed);
+  S.t = 0; S.acc = S.fireAcc = S.predAcc = S.planAcc = S.obsAcc = 0;
+  S.burningList = []; S.ev = []; S.trend = [];
+  S.metrics = { detect: 0, meanDist: 0, energyWh: 0, survival: 100, surveyed: 0, t80: null,
+                danger: 0, reroute: 0, fireArea: 0, burnedArea: 0, lost: 0, commLinks: 0, battAvg: 100 };
+  for (var i = 0; i < G * G; i++) {
+    S.state[i] = 0; S.inten[i] = 0; S.heat[i] = 0; S.smoke[i] = 0; S.smokeB[i] = 0;
+    S.belief[i] = 0.05; S.seen[i] = -999; S.pred[i] = 0; S.everFire[i] = 0; S.everDet[i] = 0;
+    S.fuel[i] = S.fuel0[i];
+  }
+  // จุดต้นเพลิง 2 จุด เหนือลมของแนวป่าทึบ (เลือกเซลล์เชื้อเพลิงหนาแน่นที่ใกล้ที่สุด)
+  var pts = [[16, 40], [28, 47]];
+  for (var k = 0; k < pts.length; k++) {
+    var px = pts[k][0], py = pts[k][1], best = null, bd = 1e9;
+    for (var y = Math.max(1, py - 9); y < Math.min(G - 1, py + 9); y++)
+      for (var x = Math.max(1, px - 9); x < Math.min(G - 1, px + 9); x++) {
+        if (S.fuel0[idx(x, y)] < 0.6) continue;
+        var dd = (x - px) * (x - px) + (y - py) * (y - py);
+        if (dd < bd) { bd = dd; best = [x, y]; }
+      }
+    if (!best) best = [px, py];
+    for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) ignite(best[0] + dx, best[1] + dy);
+  }
+  updateDistField(); updateHeat(); updateSmoke(0.5); updatePrediction();
+  spawnDrones(S.params.n);
+  logEv('sys', 'เริ่มภารกิจ — ฝูงโดรน ' + S.params.n + ' ลำ · จุดต้นเพลิง ' + pts.length + ' จุด · seed ' + S.seed);
+}
+
+/* --------- การกระเด็นของสะเก็ดไฟ (ember spotting) ใต้ลม --------- */
+function emberSpot() {
+  if (!S.burningList.length) return;
+  var w = windVec(), src = S.burningList[(rnd() * S.burningList.length) | 0];
+  var sx = src % G, sy = (src / G) | 0, jump = 4 + rnd() * 6;
+  var x = Math.round(sx + w.x * jump + (rnd() - 0.5) * 3);
+  var y = Math.round(sy + w.y * jump + (rnd() - 0.5) * 3);
+  if (x < 1 || y < 1 || x >= G - 1 || y >= G - 1) return;
+  if (S.fuel[idx(x, y)] < 0.45 || S.state[idx(x, y)] !== 0) return;
+  if (ignite(x, y)) logEv('hazard', 'พบจุดไฟใหม่จากสะเก็ดไฟใต้ลม ที่กริด (' + x + ',' + y + ')');
+}
+
+/* --------- ลูปจำลองหลัก --------- */
+function simulate(dtReal) {
+  if (!S.running) return;
+  var dt = Math.min(0.1, dtReal) * S.speed;
+  S.t += dt;
+
+  S.fireAcc += dt;
+  while (S.fireAcc >= FIRE_STEP) { stepFire(FIRE_STEP); S.fireAcc -= FIRE_STEP; }
+
+  S.acc += dt;
+  if (S.acc >= 0.35) { updateDistField(); updateHeat(); updateSmoke(S.acc); S.acc = 0; S.fieldsDirty = true; }
+
+  S.predAcc += dt;
+  if (S.predAcc >= 1.6) { updatePrediction(); driftBelief(); S.predAcc = 0; }
+
+  S.obsAcc += dt;
+  if (S.obsAcc >= 0.3) {
+    updateComms();
+    for (var k = 0; k < S.drones.length; k++) observe(S.drones[k], S.obsAcc);
+    S.obsAcc = 0;
+  }
+
+  stepDrones(dt);
+
+  S.planAcc += dt;
+  if (S.planAcc >= 0.7) { checkReroute(); computeMetrics(); S.planAcc = 0; }
+
+  S.emberAcc = (S.emberAcc || 0) + dt;
+  if (S.emberAcc >= 150) { S.emberAcc = 0; if (rnd() < 0.75) emberSpot(); }
+
+  if (!S.trend.length || S.t - S.trend[S.trend.length - 1].t > 2) {
+    S.trend.push({ t: S.t, det: S.metrics.detect, batt: S.metrics.battAvg || 0,
+                   fire: S.metrics.fireArea / (G * G) * 100 * 6 });
+    if (S.trend.length > 260) S.trend.shift();
+  }
+}
+/* ---------- bootstrap world before the 3D scene reads it ---------- */
+buildTerrain(S.seed);
+resetSim(true);
+/* ============================ ฉาก 3D (Three.js) ============================ */
+var view = document.getElementById('view');
+var renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+renderer.setClearColor(0x141110, 1);
+
+var scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x2A211B, 0.00016);
+var camera = new THREE.PerspectiveCamera(46, 1, 5, 14000);
+
+/* ---- sky dome ---- */
+var sky = new THREE.Mesh(
+  new THREE.SphereGeometry(7000, 24, 16),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false,
+    uniforms: { top: { value: new THREE.Color(0x0C0A0A) }, mid: { value: new THREE.Color(0x241C18) }, low: { value: new THREE.Color(0x4A2F1E) } },
+    vertexShader: 'varying float vH; void main(){ vH = normalize(position).y; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);} ',
+    fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 low; varying float vH;' +
+      'void main(){ float h=clamp(vH*1.15+0.12,0.0,1.0); vec3 c = h<0.34 ? mix(low,mid,h/0.34) : mix(mid,top,(h-0.34)/0.66); gl_FragColor=vec4(c,1.0);} '
+  })
+);
+scene.add(sky);
+
+/* ---- lights ---- */
+scene.add(new THREE.HemisphereLight(0x9C8B72, 0x1E1815, 0.78));
+var sun = new THREE.DirectionalLight(0xFFD6AA, 1.05);
+sun.position.set(-1400, 900, 1100); scene.add(sun);
+var fireLight = new THREE.PointLight(0xFF7A2A, 0, 1600, 2);
+fireLight.position.set(0, 120, 0); scene.add(fireLight);
+
+/* ---- terrain ---- */
+var terrGeo = new THREE.PlaneGeometry(WORLD, WORLD, G, G);
+terrGeo.rotateX(-Math.PI / 2);
+var VN = (G + 1) * (G + 1);
+terrGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(VN * 3), 3));
+(function () {
+  var pos = terrGeo.attributes.position;
+  for (var iy = 0; iy <= G; iy++) for (var ix = 0; ix <= G; ix++) {
+    var j = iy * (G + 1) + ix;
+    var wx = -HALF + ix * CELL, wz = -HALF + iy * CELL;
+    var cx = Math.min(ix, G - 1), cy = Math.min(iy, G - 1);
+    pos.setY(j, S.height[idx(cx, cy)]);
+    pos.setX(j, wx); pos.setZ(j, wz);
+  }
+  pos.needsUpdate = true; terrGeo.computeVertexNormals();
+})();
+var terrain = new THREE.Mesh(terrGeo, new THREE.MeshStandardMaterial({
+  vertexColors: true, flatShading: true, roughness: 0.96, metalness: 0.0
+}));
+scene.add(terrain);
+
+var C_FOREST = new THREE.Color(0x35482A), C_DRY = new THREE.Color(0x554F30),
+    C_ROCK = new THREE.Color(0x4A423A), C_BURN = new THREE.Color(0xFF5A18),
+    C_CHAR = new THREE.Color(0x201A17), tmpC = new THREE.Color();
+
+function paintTerrain() {
+  var col = terrGeo.attributes.color;
+  for (var iy = 0; iy <= G; iy++) for (var ix = 0; ix <= G; ix++) {
+    var j = iy * (G + 1) + ix, i = idx(Math.min(ix, G - 1), Math.min(iy, G - 1));
+    var alt = S.height[i] / MAXH, f0 = S.fuel0[i];
+    tmpC.copy(C_FOREST).lerp(C_DRY, 1 - f0);
+    tmpC.lerp(C_ROCK, clamp((alt - 0.6) * 2.1, 0, 0.85));
+    if (S.state[i] === 2) tmpC.lerp(C_CHAR, 0.92);
+    else if (S.state[i] === 1) {
+      var burnt = 1 - S.fuel[i] / Math.max(0.02, f0);
+      tmpC.lerp(C_CHAR, burnt * 0.75).lerp(C_BURN, clamp(S.inten[i] * 0.85, 0, 0.85));
+    }
+    col.setXYZ(j, tmpC.r, tmpC.g, tmpC.b);
+  }
+  col.needsUpdate = true;
+}
+
+/* ---- hazard overlay (heat + predicted encroachment) ---- */
+var hazData = new Uint8Array(G * G * 4);
+var hazTex = new THREE.DataTexture(hazData, G, G, THREE.RGBAFormat);
+hazTex.minFilter = hazTex.magFilter = THREE.LinearFilter; hazTex.needsUpdate = true;
+var hazMesh = new THREE.Mesh(terrGeo.clone(), new THREE.MeshBasicMaterial({
+  map: hazTex, transparent: true, depthWrite: false, opacity: 0.85,
+  polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
+}));
+hazMesh.position.y = 4; scene.add(hazMesh);
+
+function paintHazard() {
+  for (var y = 0; y < G; y++) for (var x = 0; x < G; x++) {
+    var i = idx(x, y), o = ((G - 1 - y) * G + x) * 4;
+    var h = clamp(S.heat[i], 0, 1.3), p = S.flags.predict ? clamp(S.pred[i], 0, 1) : 0;
+    var pOnly = clamp(p - h * 1.3, 0, 1);
+    hazData[o]     = clamp(226 * h + 237 * pOnly, 0, 255);
+    hazData[o + 1] = clamp(70 * h + 168 * pOnly, 0, 255);
+    hazData[o + 2] = clamp(38 * h + 60 * pOnly, 0, 255);
+    hazData[o + 3] = clamp(h * 150 + pOnly * 74, 0, 205);
+  }
+  hazTex.needsUpdate = true;
+}
+
+/* ---- trees ---- */
+var treeCells = [], treeDummy = new THREE.Object3D(), trees;
+(function () {
+  for (var y = 0; y < G; y++) for (var x = 0; x < G; x++) {
+    var i = idx(x, y);
+    if (S.fuel0[i] < 0.42) continue;
+    var n = S.fuel0[i] > 0.78 ? 2 : 1;
+    for (var k = 0; k < n; k++) {
+      var jx = (rnd() - 0.5) * CELL * 0.8, jz = (rnd() - 0.5) * CELL * 0.8;
+      var p = cellToWorld(x, y);
+      treeCells.push({ i: i, x: p.x + jx, z: p.z + jz, s: 0.75 + rnd() * 0.7, r: rnd() * 6.28 });
+    }
+  }
+  var g = new THREE.ConeGeometry(9, 36, 5); g.translate(0, 18, 0);
+  trees = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true }), treeCells.length);
+  trees.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(trees);
+})();
+var C_TREE = new THREE.Color(0x3E5626), C_TREE_DRY = new THREE.Color(0x5C572A),
+    C_TREE_FIRE = new THREE.Color(0xFF7A22), C_TREE_ASH = new THREE.Color(0x1B1613);
+
+function paintTrees() {
+  for (var k = 0; k < treeCells.length; k++) {
+    var t = treeCells[k], st = S.state[t.i], sc = t.s, y = heightAt(t.x, t.z);
+    tmpC.copy(C_TREE).lerp(C_TREE_DRY, 1 - S.fuel0[t.i]);
+    if (st === 1) { tmpC.lerp(C_TREE_FIRE, clamp(S.inten[t.i], 0, 1) * 0.9); sc *= 1 - 0.35 * clamp(S.inten[t.i], 0, 1); }
+    else if (st === 2) { tmpC.copy(C_TREE_ASH); sc *= 0.42; }
+    treeDummy.position.set(t.x, y - 2, t.z);
+    treeDummy.rotation.set(0, t.r, 0);
+    treeDummy.scale.set(sc, sc, sc);
+    treeDummy.updateMatrix();
+    trees.setMatrixAt(k, treeDummy.matrix);
+    trees.setColorAt(k, tmpC);
+  }
+  trees.instanceMatrix.needsUpdate = true;
+  if (trees.instanceColor) trees.instanceColor.needsUpdate = true;
+}
+
+/* ---- sprite textures ---- */
+function radialTex(inner, outer, pow) {
+  var c = document.createElement('canvas'); c.width = c.height = 64;
+  var g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, inner); gr.addColorStop(pow, outer); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  var t = new THREE.CanvasTexture(c); return t;
+}
+var texFire = radialTex('rgba(255,255,230,1)', 'rgba(255,110,30,0.55)', 0.42);
+var texSmoke = radialTex('rgba(255,255,255,0.75)', 'rgba(255,255,255,0.24)', 0.55);
+
+function particleMat(tex, blend) {
+  return new THREE.ShaderMaterial({
+    uniforms: { map: { value: tex } },
+    vertexShader: 'attribute float aSize; attribute float aAlpha; attribute vec3 aCol;' +
+      'varying float vA; varying vec3 vC;' +
+      'void main(){ vA=aAlpha; vC=aCol; vec4 mv=modelViewMatrix*vec4(position,1.0);' +
+      'gl_PointSize=aSize*(420.0/max(60.0,-mv.z)); gl_Position=projectionMatrix*mv; }',
+    fragmentShader: 'uniform sampler2D map; varying float vA; varying vec3 vC;' +
+      'void main(){ vec4 t=texture2D(map,gl_PointCoord); if(t.a*vA<0.01) discard; gl_FragColor=vec4(vC,t.a*vA); }',
+    transparent: true, depthWrite: false, blending: blend
+  });
+}
+
+/* ---- fire particles ---- */
+var FIRE_N = 1400;
+var fireGeo = new THREE.BufferGeometry();
+fireGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(FIRE_N * 3), 3));
+fireGeo.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(FIRE_N), 1));
+fireGeo.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array(FIRE_N), 1));
+fireGeo.setAttribute('aCol', new THREE.BufferAttribute(new Float32Array(FIRE_N * 3), 3));
+var firePts = new THREE.Points(fireGeo, particleMat(texFire, THREE.AdditiveBlending));
+firePts.frustumCulled = false; scene.add(firePts);
+
+function updateFire(now) {
+  var pos = fireGeo.attributes.position.array, sz = fireGeo.attributes.aSize.array,
+      al = fireGeo.attributes.aAlpha.array, cl = fireGeo.attributes.aCol.array;
+  var list = S.burningList, n = Math.min(FIRE_N, list.length * 2), k = 0, cx = 0, cz = 0;
+  for (var q = 0; q < n; q++) {
+    var i = list[(q * 7919) % Math.max(1, list.length)];
+    if (i === undefined || S.state[i] !== 1) continue;
+    var x = i % G, y = (i / G) | 0, p = cellToWorld(x, y);
+    var ph = (i * 0.37 + now * (2.0 + (i % 5) * 0.3));
+    var jx = Math.sin(ph) * 11, jz = Math.cos(ph * 0.8) * 11;
+    var lift = (Math.sin(ph * 0.9) * 0.5 + 0.5) * 26 * S.inten[i];
+    pos[k * 3] = p.x + jx; pos[k * 3 + 1] = heightAt(p.x, p.z) + 8 + lift; pos[k * 3 + 2] = p.z + jz;
+    sz[k] = 26 + 24 * S.inten[i] + Math.sin(ph * 3) * 6;
+    al[k] = clamp(S.inten[i] * (0.55 + 0.45 * Math.sin(ph * 2.3)), 0, 1) * 0.8;
+    var hot = 0.35 + 0.65 * S.inten[i];
+    cl[k * 3] = 1; cl[k * 3 + 1] = 0.30 + 0.45 * hot; cl[k * 3 + 2] = 0.06 + 0.12 * hot;
+    cx += p.x; cz += p.z; k++;
+    if (k >= FIRE_N) break;
+  }
+  for (var m = k; m < FIRE_N; m++) al[m] = 0;
+  fireGeo.attributes.position.needsUpdate = true; fireGeo.attributes.aSize.needsUpdate = true;
+  fireGeo.attributes.aAlpha.needsUpdate = true; fireGeo.attributes.aCol.needsUpdate = true;
+  if (k > 0) {
+    cx /= k; cz /= k;
+    fireLight.position.set(cx, heightAt(cx, cz) + 130, cz);
+    fireLight.intensity = clamp(S.burningList.length / 55, 0, 3.2);
+    S.fireCentroid = { x: cx, z: cz };
+  } else fireLight.intensity = 0;
+}
+
+/* ---- smoke particles ---- */
+var SMOKE_N = 900, smokeP = [];
+var smGeo = new THREE.BufferGeometry();
+smGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SMOKE_N * 3), 3));
+smGeo.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(SMOKE_N), 1));
+smGeo.setAttribute('aAlpha', new THREE.BufferAttribute(new Float32Array(SMOKE_N), 1));
+smGeo.setAttribute('aCol', new THREE.BufferAttribute(new Float32Array(SMOKE_N * 3), 3));
+var smokePts = new THREE.Points(smGeo, particleMat(texSmoke, THREE.NormalBlending));
+smokePts.frustumCulled = false; scene.add(smokePts);
+for (var si = 0; si < SMOKE_N; si++) smokeP.push({ life: 0 });
+
+function updateSmoke3D(dt) {
+  var w = windVec(), pos = smGeo.attributes.position.array, sz = smGeo.attributes.aSize.array,
+      al = smGeo.attributes.aAlpha.array, cl = smGeo.attributes.aCol.array;
+  var spawn = Math.min(24, Math.ceil(S.burningList.length * 0.35));
+  for (var k = 0; k < SMOKE_N; k++) {
+    var p = smokeP[k];
+    if (p.life <= 0) {
+      if (spawn > 0 && S.burningList.length && showSmoke) {
+        var i = S.burningList[(rnd() * S.burningList.length) | 0];
+        var c = cellToWorld(i % G, (i / G) | 0);
+        p.x = c.x + (rnd() - 0.5) * 40; p.z = c.z + (rnd() - 0.5) * 40;
+        p.y = heightAt(p.x, p.z) + 12; p.life = 1; p.max = 12 + rnd() * 10;
+        p.vy = 16 + rnd() * 20; p.s = 40 + rnd() * 70; spawn--;
+      } else { al[k] = 0; continue; }
+    }
+    p.life -= dt / p.max;
+    p.x += w.x * S.wind.speed * dt * 0.9 + (rnd() - 0.5) * 4;
+    p.z += w.y * S.wind.speed * dt * 0.9 + (rnd() - 0.5) * 4;
+    p.y += p.vy * dt; p.vy *= 0.995; p.s += 22 * dt;
+    pos[k * 3] = p.x; pos[k * 3 + 1] = p.y; pos[k * 3 + 2] = p.z;
+    sz[k] = p.s;
+    al[k] = clamp(p.life, 0, 1) * 0.26 * (showSmoke ? 1 : 0);
+    var g = 0.30 + 0.34 * (1 - p.life);
+    cl[k * 3] = g + 0.06; cl[k * 3 + 1] = g + 0.02; cl[k * 3 + 2] = g;
+  }
+  smGeo.attributes.position.needsUpdate = true; smGeo.attributes.aSize.needsUpdate = true;
+  smGeo.attributes.aAlpha.needsUpdate = true; smGeo.attributes.aCol.needsUpdate = true;
+}
+
+/* ---- base station ---- */
+(function () {
+  var g = new THREE.Group();
+  var pad = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 6, 20),
+    new THREE.MeshStandardMaterial({ color: 0x2A2723, roughness: 0.9 }));
+  var ring = new THREE.Mesh(new THREE.TorusGeometry(38, 2.4, 6, 28),
+    new THREE.MeshBasicMaterial({ color: 0x59B7B0 }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 4;
+  var mast = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.6, 78, 6),
+    new THREE.MeshStandardMaterial({ color: 0x3A342E }));
+  mast.position.set(46, 39, 0);
+  var beacon = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0x59B7B0 }));
+  beacon.position.set(46, 80, 0);
+  g.add(pad, ring, mast, beacon);
+  g.position.set(S.base.x, heightAt(S.base.x, S.base.z) + 3, S.base.z);
+  scene.add(g);
+  window.__beacon = beacon;
+})();
+
+/* ---- drone visuals ---- */
+var droneRoot = new THREE.Group(); scene.add(droneRoot);
+var vis = [];
+function buildDroneVisuals() {
+  while (droneRoot.children.length) droneRoot.remove(droneRoot.children[0]);
+  vis = [];
+  for (var k = 0; k < S.drones.length; k++) {
+    var d = S.drones[k], col = new THREE.Color(d.col), g = new THREE.Group();
+    var body = new THREE.Mesh(new THREE.BoxGeometry(11, 4.5, 15),
+      new THREE.MeshStandardMaterial({ color: 0x2B2723, roughness: 0.7, metalness: 0.2 }));
+    g.add(body);
+    var rotors = [];
+    for (var a = 0; a < 4; a++) {
+      var sx = a < 2 ? 1 : -1, sz = (a % 2) ? 1 : -1;
+      var arm = new THREE.Mesh(new THREE.BoxGeometry(13, 1.6, 1.8),
+        new THREE.MeshStandardMaterial({ color: 0x35302A }));
+      arm.position.set(sx * 7, 0, sz * 7); arm.rotation.y = sx * sz * 0.7; g.add(arm);
+      var rot = new THREE.Mesh(new THREE.CylinderGeometry(8, 8, 0.5, 12),
+        new THREE.MeshBasicMaterial({ color: 0x8A8078, transparent: true, opacity: 0.28 }));
+      rot.position.set(sx * 12, 2.6, sz * 12); g.add(rot); rotors.push(rot);
+    }
+    var led = new THREE.Mesh(new THREE.SphereGeometry(2.4, 8, 6), new THREE.MeshBasicMaterial({ color: col }));
+    led.position.set(0, 4, -6); g.add(led);
+
+    var cone = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 22, 1, true),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.075, side: THREE.DoubleSide, depthWrite: false }));
+    droneRoot.add(cone);
+
+    var ring = new THREE.Mesh(new THREE.RingGeometry(16, 20, 24),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; droneRoot.add(ring);
+
+    var pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    var pathLine = new THREE.Line(pGeo, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 }));
+    pathLine.frustumCulled = false; droneRoot.add(pathLine);
+
+    var tGeo = new THREE.BufferGeometry();
+    tGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(90 * 3), 3));
+    var trail = new THREE.Line(tGeo, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.42 }));
+    trail.frustumCulled = false; droneRoot.add(trail);
+
+    droneRoot.add(g);
+    vis.push({ g: g, rotors: rotors, cone: cone, ring: ring, pathLine: pathLine, trail: trail, led: led });
+  }
+}
+
+var commGeo = new THREE.BufferGeometry();
+commGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(64 * 3), 3));
+var commLines = new THREE.LineSegments(commGeo,
+  new THREE.LineBasicMaterial({ color: 0x59B7B0, transparent: true, opacity: 0.22 }));
+commLines.frustumCulled = false; scene.add(commLines);
+
+var showPaths = true, showSensor = true, showSmoke = true, showHazard = true;
+
+function updateDroneVisuals(dt, now) {
+  for (var k = 0; k < S.drones.length; k++) {
+    var d = S.drones[k], v = vis[k]; if (!v) continue;
+    v.g.position.set(d.x, d.y, d.z);
+    v.g.rotation.y = d.hdg;
+    v.g.rotation.z = d.state === 'LOST' ? 0.9 : -clamp(d.spd / CRUISE, 0, 1) * 0.18;
+    for (var r = 0; r < 4; r++) v.rotors[r].rotation.y = d.state === 'LOST' ? 0 : now * (26 + r * 3);
+    var lost = d.state === 'LOST';
+    v.led.material.color.set(lost ? 0x552A22 : (d.state === 'CHARGE' ? 0xEDB44B : (d.linked ? d.col : 0xE23B2A)));
+
+    var gy = heightAt(d.x, d.z), agl = Math.max(10, d.y - gy);
+    v.cone.visible = showSensor && !lost;
+    v.cone.position.set(d.x, d.y - agl / 2, d.z);
+    v.cone.scale.set(S.params.sensor, agl, S.params.sensor);
+    v.ring.visible = showPaths && !lost && d.ti >= 0;
+    v.ring.position.set(d.tx, heightAt(d.tx, d.tz) + 6, d.tz);
+
+    v.pathLine.visible = showPaths && !lost;
+    var pa = v.pathLine.geometry.attributes.position;
+    pa.setXYZ(0, d.x, d.y, d.z); pa.setXYZ(1, d.tx, heightAt(d.tx, d.tz) + 8, d.tz);
+    pa.needsUpdate = true;
+
+    var ta = v.trail.geometry.attributes.position, tr = d.trail;
+    for (var q = 0; q < 90; q++) {
+      var p = tr[Math.min(q, tr.length - 1)] || { x: d.x, y: d.y, z: d.z };
+      ta.setXYZ(q, p.x, p.y, p.z);
+    }
+    ta.needsUpdate = true;
+    v.trail.geometry.setDrawRange(0, Math.max(2, tr.length));
+    v.trail.visible = showPaths && tr.length > 2;
+  }
+  // comm links
+  var cp = commGeo.attributes.position.array, ci = 0;
+  if (S.flags.coop) {
+    for (var a = 0; a < S.drones.length; a++) {
+      var A = S.drones[a]; if (A.state === 'LOST' || !A.linked) continue;
+      var db = Math.hypot(A.x - S.base.x, A.z - S.base.z);
+      if (db < S.params.comm * 1.6 && ci < 60) {
+        cp[ci * 3] = A.x; cp[ci * 3 + 1] = A.y; cp[ci * 3 + 2] = A.z; ci++;
+        cp[ci * 3] = S.base.x; cp[ci * 3 + 1] = heightAt(S.base.x, S.base.z) + 80; cp[ci * 3 + 2] = S.base.z; ci++;
+      }
+      for (var b = a + 1; b < S.drones.length; b++) {
+        var B = S.drones[b]; if (B.state === 'LOST' || !B.linked) continue;
+        if (Math.hypot(A.x - B.x, A.z - B.z) < S.params.comm && ci < 62) {
+          cp[ci * 3] = A.x; cp[ci * 3 + 1] = A.y; cp[ci * 3 + 2] = A.z; ci++;
+          cp[ci * 3] = B.x; cp[ci * 3 + 1] = B.y; cp[ci * 3 + 2] = B.z; ci++;
+        }
+      }
+    }
+  }
+  commGeo.setDrawRange(0, ci);
+  commGeo.attributes.position.needsUpdate = true;
+}
+
+/* ---- camera control ---- */
+var cam = { theta: 0.72, phi: 0.90, r: 2150, tx: 0, ty: 90, tz: 0, mode: 'orbit', follow: 0 };
+function applyCamera(dt) {
+  var tx = cam.tx, ty = cam.ty, tz = cam.tz, r = cam.r, th = cam.theta, ph = cam.phi;
+  if (cam.mode === 'follow') {
+    var d = S.drones[cam.follow % Math.max(1, S.drones.length)];
+    if (d) { tx = d.x; ty = d.y; tz = d.z; r = 340; ph = 1.02; th = d.hdg + Math.PI; }
+  } else if (cam.mode === 'front') {
+    var c = S.fireCentroid || { x: 0, z: 0 };
+    var w = windVec();
+    tx = c.x; ty = heightAt(c.x, c.z) + 90; tz = c.z;
+    r = 900; ph = 1.24; th = Math.atan2(-w.x, -w.y) + Math.PI;
+  } else if (cam.mode === 'top') {
+    tx = 0; ty = 0; tz = 0; r = 2500; ph = 0.16; th = 0;
+  }
+  var px = tx + r * Math.sin(ph) * Math.sin(th);
+  var py = ty + r * Math.cos(ph);
+  var pz = tz + r * Math.sin(ph) * Math.cos(th);
+  var k = cam.mode === 'orbit' ? 1 : Math.min(1, dt * 2.6);
+  camera.position.lerp(new THREE.Vector3(px, py, pz), k);
+  if (!cam._look) cam._look = new THREE.Vector3(tx, ty, tz);
+  cam._look.lerp(new THREE.Vector3(tx, ty, tz), k);
+  camera.lookAt(cam._look);
+}
+
+(function bindCamera() {
+  var el = renderer.domElement, drag = null;
+  el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  el.addEventListener('pointerdown', function (e) {
+    el.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey };
+    setCam('orbit');
+  });
+  el.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.pan) {
+      var s = cam.r * 0.0016;
+      cam.tx -= (dx * Math.cos(cam.theta) - dy * Math.sin(cam.theta) * 0.6) * s;
+      cam.tz += (dx * Math.sin(cam.theta) + dy * Math.cos(cam.theta) * 0.6) * s;
+    } else {
+      cam.theta -= dx * 0.005;
+      cam.phi = clamp(cam.phi - dy * 0.004, 0.09, 1.44);
+    }
+  });
+  el.addEventListener('pointerup', function () { drag = null; });
+  el.addEventListener('pointercancel', function () { drag = null; });
+  el.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    cam.r = clamp(cam.r * (1 + Math.sign(e.deltaY) * 0.11), 260, 6000);
+    setCam('orbit');
+  }, { passive: false });
+})();
+
+function setCam(mode) {
+  if (cam.mode === mode) return;
+  cam.mode = mode;
+  document.querySelectorAll('#camrow button').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.cam === mode);
+  });
+}
+
+function resize() {
+  var w = view.clientWidth, h = view.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+/* ============================ แผนที่ไฟป่า 2D ============================ */
+var mapCv = document.getElementById('map2d'), mg = mapCv.getContext('2d');
+var MW = mapCv.width;
+var off = document.createElement('canvas'); off.width = off.height = G;
+var og = off.getContext('2d'), img = og.createImageData(G, G);
+var shade = new Float32Array(G * G);
+(function () {
+  for (var y = 0; y < G; y++) for (var x = 0; x < G; x++) {
+    var hx = S.height[idx(Math.min(G - 1, x + 1), y)] - S.height[idx(Math.max(0, x - 1), y)];
+    var hy = S.height[idx(x, Math.min(G - 1, y + 1))] - S.height[idx(x, Math.max(0, y - 1))];
+    shade[idx(x, y)] = clamp(0.74 + (-hx * 0.7 - hy * 0.7) / 45, 0.34, 1.45);
+  }
+})();
+var layers = { fire: true, smoke: true, heat: false, belief: false, track: true };
+
+function m2x(wx) { return (wx + HALF) / WORLD * MW; }
+function m2y(wz) { return (wz + HALF) / WORLD * MW; }
+
+function drawMap() {
+  var d = img.data;
+  for (var y = 0; y < G; y++) for (var x = 0; x < G; x++) {
+    var i = idx(x, y), o = i * 4, sh = shade[i];
+    var f = S.fuel0[i], alt = S.height[i] / MAXH;
+    var r = (44 + 46 * (1 - f) + 34 * alt) * sh;
+    var g = (78 + 6 * (1 - f) + 22 * alt) * sh;
+    var b = (36 + 12 * (1 - f) + 30 * alt) * sh;
+    if (S.state[i] === 2) { r = 34 * sh; g = 28 * sh; b = 25 * sh; }
+    else if (S.state[i] === 1 && layers.fire) {
+      var t = clamp(S.inten[i], 0, 1);
+      r = 255; g = 90 + 130 * t; b = 40 * t;
+    }
+    if (layers.heat) { var h = clamp(S.heat[i], 0, 1); r = r + (226 - r) * h * 0.65; g = g + (59 - g) * h * 0.65; b = b + (42 - b) * h * 0.65; }
+    if (layers.smoke) { var s = clamp(S.smoke[i] * 0.42, 0, 0.72); r += (168 - r) * s; g += (162 - g) * s; b += (154 - b) * s; }
+    if (layers.belief) { var bl = clamp((S.belief[i] - 0.15) * 1.2, 0, 1); r += (89 - r) * bl * 0.75; g += (183 - g) * bl * 0.75; b += (176 - b) * bl * 0.75; }
+    d[o] = clamp(r, 0, 255); d[o + 1] = clamp(g, 0, 255); d[o + 2] = clamp(b, 0, 255); d[o + 3] = 255;
+  }
+  og.putImageData(img, 0, 0);
+  mg.imageSmoothingEnabled = false;
+  mg.drawImage(off, 0, 0, MW, MW);
+
+  // ฐานปฏิบัติการ
+  mg.strokeStyle = '#59B7B0'; mg.lineWidth = 1;
+  var bx = m2x(S.base.x), by = m2y(S.base.z);
+  mg.beginPath(); mg.arc(bx, by, 5, 0, 6.283); mg.stroke();
+  mg.beginPath(); mg.moveTo(bx - 8, by); mg.lineTo(bx + 8, by); mg.moveTo(bx, by - 8); mg.lineTo(bx, by + 8); mg.stroke();
+
+  if (layers.track) {
+    // comm links
+    if (S.flags.coop) {
+      mg.strokeStyle = 'rgba(89,183,176,.30)'; mg.lineWidth = 0.7;
+      for (var a = 0; a < S.drones.length; a++) {
+        var A = S.drones[a]; if (A.state === 'LOST' || !A.linked) continue;
+        for (var b2 = a + 1; b2 < S.drones.length; b2++) {
+          var B = S.drones[b2]; if (B.state === 'LOST' || !B.linked) continue;
+          if (Math.hypot(A.x - B.x, A.z - B.z) < S.params.comm) {
+            mg.beginPath(); mg.moveTo(m2x(A.x), m2y(A.z)); mg.lineTo(m2x(B.x), m2y(B.z)); mg.stroke();
+          }
+        }
+      }
+    }
+    for (var k = 0; k < S.drones.length; k++) {
+      var dr = S.drones[k];
+      mg.strokeStyle = dr.col; mg.fillStyle = dr.col;
+      mg.globalAlpha = dr.state === 'LOST' ? 0.35 : 1;
+      // trail
+      mg.globalAlpha *= 0.55; mg.lineWidth = 1;
+      mg.beginPath();
+      for (var q = 0; q < dr.trail.length; q++) {
+        var p = dr.trail[q];
+        if (q === 0) mg.moveTo(m2x(p.x), m2y(p.z)); else mg.lineTo(m2x(p.x), m2y(p.z));
+      }
+      mg.stroke();
+      mg.globalAlpha = dr.state === 'LOST' ? 0.35 : 1;
+      // planned leg
+      if (dr.state !== 'LOST') {
+        mg.setLineDash([2, 3]); mg.globalAlpha = 0.55;
+        mg.beginPath(); mg.moveTo(m2x(dr.x), m2y(dr.z)); mg.lineTo(m2x(dr.tx), m2y(dr.tz)); mg.stroke();
+        mg.setLineDash([]); mg.globalAlpha = 1;
+        // sensor footprint
+        mg.globalAlpha = 0.30;
+        mg.beginPath(); mg.arc(m2x(dr.x), m2y(dr.z), S.params.sensor / WORLD * MW, 0, 6.283); mg.stroke();
+        mg.globalAlpha = 1;
+      }
+      var px = m2x(dr.x), py = m2y(dr.z);
+      if (dr.state === 'LOST') {
+        mg.lineWidth = 1.4; mg.strokeStyle = '#E23B2A';
+        mg.beginPath(); mg.moveTo(px - 3.5, py - 3.5); mg.lineTo(px + 3.5, py + 3.5);
+        mg.moveTo(px + 3.5, py - 3.5); mg.lineTo(px - 3.5, py + 3.5); mg.stroke();
+      } else {
+        mg.beginPath(); mg.arc(px, py, 3, 0, 6.283); mg.fill();
+        mg.lineWidth = 1.2; mg.beginPath(); mg.moveTo(px, py);
+        mg.lineTo(px + Math.sin(dr.hdg) * 8, py + Math.cos(dr.hdg) * 8); mg.stroke();
+      }
+      mg.globalAlpha = 1;
+    }
+  }
+  // ลูกศรลม
+  var w = windVec(), wx = MW - 26, wy = 24;
+  mg.strokeStyle = 'rgba(243,234,220,.75)'; mg.lineWidth = 1.3;
+  mg.beginPath(); mg.moveTo(wx - w.x * 11, wy - w.y * 11); mg.lineTo(wx + w.x * 11, wy + w.y * 11); mg.stroke();
+  mg.beginPath();
+  mg.moveTo(wx + w.x * 11, wy + w.y * 11);
+  mg.lineTo(wx + w.x * 4 - w.y * 4, wy + w.y * 4 + w.x * 4);
+  mg.lineTo(wx + w.x * 4 + w.y * 4, wy + w.y * 4 - w.x * 4);
+  mg.closePath(); mg.fillStyle = 'rgba(243,234,220,.75)'; mg.fill();
+}
+
+/* ============================ กราฟแนวโน้ม ============================ */
+var trCv = document.getElementById('trend'), tg = trCv.getContext('2d');
+function drawTrend() {
+  var W = trCv.width, H = trCv.height;
+  tg.clearRect(0, 0, W, H);
+  tg.strokeStyle = 'rgba(59,50,43,.9)'; tg.lineWidth = 1;
+  for (var q = 1; q < 4; q++) {
+    var y = H * q / 4;
+    tg.beginPath(); tg.moveTo(0, y); tg.lineTo(W, y); tg.stroke();
+  }
+  var data = S.trend; if (data.length < 2) return;
+  var n = data.length, series = [
+    { k: 'det', c: '#59B7B0', w: 2 }, { k: 'batt', c: '#EDB44B', w: 1.4 }, { k: 'fire', c: '#E23B2A', w: 1.4 }
+  ];
+  for (var s = 0; s < series.length; s++) {
+    tg.strokeStyle = series[s].c; tg.lineWidth = series[s].w; tg.beginPath();
+    for (var i = 0; i < n; i++) {
+      var x = i / (n - 1) * W, v = clamp(data[i][series[s].k], 0, 100);
+      var y2 = H - v / 100 * (H - 6) - 3;
+      if (i === 0) tg.moveTo(x, y2); else tg.lineTo(x, y2);
+    }
+    tg.stroke();
+    var lv = clamp(data[n - 1][series[s].k], 0, 100);
+    tg.fillStyle = series[s].c;
+    tg.beginPath(); tg.arc(W - 2, H - lv / 100 * (H - 6) - 3, 2.6, 0, 6.283); tg.fill();
+  }
+}
+
+/* ============================ HUD ============================ */
+var METRICS = [
+  { id: 'detect', th: 'สัดส่วนแนวไฟปัจจุบันที่ตรวจพบ', en: 'active-front detection (EMA)' },
+  { id: 'detectCum', th: 'ตรวจพบสะสมของพื้นที่ที่เคยลุกไหม้', en: 'cumulative fire detection' },
+  { id: 'dist', th: 'ระยะห่างเฉลี่ยจากแนวไฟ', en: 'mean standoff' },
+  { id: 'energy', th: 'พลังงานที่ใช้รวม', en: 'total energy' },
+  { id: 'surv', th: 'อัตราการรอดของฝูงโดรน', en: 'swarm survival' },
+  { id: 't80', th: 'เวลาครอบคลุมแนวไฟ 80%', en: 'time to 80%' },
+  { id: 'area', th: 'พื้นที่เผาไหม้สะสม', en: 'burned area' },
+  { id: 'danger', th: 'เข้าเขตอันตราย / re-route', en: 'hazard entries / reroutes' },
+  { id: 'survey', th: 'พื้นที่ที่สำรวจแล้ว', en: 'area surveyed' }
+];
+var mEls = {};
+(function buildMetrics() {
+  var host = document.getElementById('metrics');
+  METRICS.forEach(function (m) {
+    var row = document.createElement('div'); row.className = 'mrow';
+    row.innerHTML = '<span class="mk">' + m.th + '<small>' + m.en + '</small></span><span class="mv plain">—</span>';
+    host.appendChild(row);
+    mEls[m.id] = row.lastChild;
+  });
+})();
+
+function cls(el, c) { el.className = 'mv ' + c; }
+function updateMetrics() {
+  var m = S.metrics;
+  mEls.detect.textContent = m.detect.toFixed(1) + '%';
+  cls(mEls.detect, m.detect >= 80 ? 'good' : m.detect >= 45 ? 'warn' : 'bad');
+  mEls.detectCum.textContent = (m.detectCum || 0).toFixed(1) + '%';
+  cls(mEls.detectCum, (m.detectCum || 0) >= 60 ? 'good' : (m.detectCum || 0) >= 30 ? 'warn' : 'bad');
+  mEls.dist.textContent = Math.round(m.meanDist) + ' ม.';
+  cls(mEls.dist, m.meanDist >= 260 ? 'good' : m.meanDist >= 150 ? 'warn' : 'bad');
+  mEls.energy.textContent = m.energyWh.toFixed(0) + ' Wh';
+  cls(mEls.energy, 'plain');
+  mEls.surv.textContent = m.survival.toFixed(0) + '%';
+  cls(mEls.surv, m.survival > 99 ? 'good' : m.survival >= 60 ? 'warn' : 'bad');
+  mEls.t80.textContent = m.t80 === null ? '—' : fmtT(m.t80);
+  cls(mEls.t80, m.t80 === null ? 'plain' : 'good');
+  mEls.area.textContent = (m.burnedArea || 0) + ' ไร่';
+  cls(mEls.area, 'plain');
+  mEls.danger.textContent = m.danger + ' / ' + m.reroute;
+  cls(mEls.danger, m.danger > 0 ? 'warn' : 'good');
+  mEls.survey.textContent = m.surveyed.toFixed(0) + '%';
+  cls(mEls.survey, 'plain');
+}
+
+var dEls = [];
+function buildDroneCards() {
+  var host = document.getElementById('drones'); host.innerHTML = ''; dEls = [];
+  S.drones.forEach(function (d) {
+    var el = document.createElement('div'); el.className = 'drone';
+    el.innerHTML =
+      '<div class="d-top"><span class="d-dot" style="color:' + d.col + '"></span>' +
+      '<span class="d-id">' + d.name + '</span><span class="d-state">SURVEY</span></div>' +
+      '<div class="batt"><i style="width:100%"></i><u style="left:25%"></u></div>' +
+      '<div class="d-stats"><div><b>แบตเตอรี่</b><span>100%</span></div>' +
+      '<div><b>ห่างแนวไฟ</b><span>—</span></div><div><b>ตรวจพบ</b><span>0</span></div></div>';
+    host.appendChild(el);
+    dEls.push({
+      root: el, state: el.querySelector('.d-state'), bar: el.querySelector('.batt i'),
+      mark: el.querySelector('.batt u'), vals: el.querySelectorAll('.d-stats span')
+    });
+  });
+}
+var ST_TH = { SURVEY: 'สำรวจ', RETURN: 'กลับฐาน', CHARGE: 'เปลี่ยนแบต', LOST: 'สูญเสีย' };
+function updateDroneCards() {
+  for (var k = 0; k < S.drones.length; k++) {
+    var d = S.drones[k], e = dEls[k]; if (!e) continue;
+    e.state.textContent = ST_TH[d.state] + (d.linked ? '' : ' · ไร้สัญญาณ');
+    e.state.style.color = d.state === 'LOST' ? '#E23B2A' : (d.linked ? '' : '#EDB44B');
+    e.bar.style.width = Math.max(0, d.batt).toFixed(0) + '%';
+    e.bar.style.background = d.batt < S.params.reserve ? '#E23B2A' : d.batt < S.params.reserve + 18 ? '#EDB44B' : '#93C46E';
+    e.mark.style.left = S.params.reserve + '%';
+    e.vals[0].textContent = Math.max(0, d.batt).toFixed(0) + '%';
+    var df = d.state === 'LOST' ? 0 : sampleField(S.distFire, d.x, d.z);
+    e.vals[1].textContent = d.state === 'LOST' ? '—' : (df > 3500 ? '>3.5 กม.' : Math.round(df) + ' ม.');
+    e.vals[2].textContent = d.detects + ' เซลล์';
+    e.root.style.opacity = d.state === 'LOST' ? 0.45 : 1;
+  }
+}
+
+function updateLog() {
+  if (!S.evDirty) return;
+  S.evDirty = false;
+  var host = document.getElementById('logrows'), html = '';
+  var list = S.ev.slice(-6);
+  for (var i = 0; i < list.length; i++) {
+    var e = list[i];
+    html += '<div class="logrow"><time>T+' + fmtT(e.t) + '</time>' +
+      '<span class="tag ' + e.tag + '">' + e.tag.toUpperCase() + '</span><p>' + e.text + '</p></div>';
+  }
+  host.innerHTML = html;
+}
+
+function updateTop() {
+  document.getElementById('clock').textContent = fmtT(S.t);
+  var pm = document.getElementById('pillMode');
+  pm.textContent = S.flags.predict ? 'โหมด: พยากรณ์การลุกลาม' : 'โหมด: baseline (ไม่พยากรณ์)';
+  pm.className = 'pill' + (S.flags.predict ? ' on' : '');
+  var alive = S.drones.filter(function (d) { return d.state !== 'LOST'; }).length;
+  var pc = document.getElementById('pillComm');
+  pc.textContent = 'COMM ' + S.metrics.commLinks + '/' + alive;
+  pc.className = 'pill' + (S.metrics.commLinks === alive && alive ? ' on' : ' alarm');
+  var pa = document.getElementById('pillAlarm');
+  pa.textContent = 'แนวไฟ ' + S.metrics.fireArea + ' ไร่';
+  pa.className = 'pill' + (S.metrics.fireArea > 0 ? ' alarm' : '');
+  document.getElementById('mapinfo').textContent = 'belief ' + S.metrics.detect.toFixed(0) + '% · สำรวจ ' + S.metrics.surveyed.toFixed(0) + '%';
+  document.getElementById('windlabel').textContent = 'ลม ' + ('00' + S.wind.dir).slice(-3) + '° ' + S.wind.speed.toFixed(1) + ' ม./วิ';
+}
+
+/* ============================ ตารางเปรียบเทียบ ============================ */
+var CMP = [
+  { k: 'detect', th: 'ตรวจพบแนวไฟ (%)', f: function (v) { return v.toFixed(1); } },
+  { k: 'detectCum', th: 'ตรวจพบสะสม (%)', f: function (v) { return (v || 0).toFixed(1); } },
+  { k: 'meanDist', th: 'ระยะห่างแนวไฟ (ม.)', f: function (v) { return Math.round(v); } },
+  { k: 'energyWh', th: 'พลังงาน (Wh)', f: function (v) { return v.toFixed(0); } },
+  { k: 'survival', th: 'อัตรารอด (%)', f: function (v) { return v.toFixed(0); } },
+  { k: 'danger', th: 'เข้าเขตอันตราย', f: function (v) { return v; } },
+  { k: 'reroute', th: 're-route', f: function (v) { return v; } },
+  { k: 'burnedArea', th: 'พื้นที่เผาไหม้ (ไร่)', f: function (v) { return v; } }
+];
+function drawCmp() {
+  var b = document.getElementById('cmpbody'), h = '';
+  CMP.forEach(function (r) {
+    var a = S.snaps.model, c = S.snaps.base;
+    h += '<tr><td>' + r.th + '</td><td' + (a ? '' : ' class="empty"') + '>' + (a ? r.f(a[r.k]) : '—') +
+      '</td><td' + (c ? '' : ' class="empty"') + '>' + (c ? r.f(c[r.k]) : '—') + '</td></tr>';
+  });
+  h += '<tr><td>เวลาภารกิจ (มม:วว)</td><td' + (S.snaps.model ? '' : ' class="empty"') + '>' +
+    (S.snaps.model ? fmtT(S.snaps.model.t) : '—') + '</td><td' + (S.snaps.base ? '' : ' class="empty"') + '>' +
+    (S.snaps.base ? fmtT(S.snaps.base.t) : '—') + '</td></tr>';
+  b.innerHTML = h;
+}
+
+/* ============================ การเชื่อมต่อ UI ============================ */
+function $(id) { return document.getElementById(id); }
+function slider(id, vid, fmt, apply) {
+  var el = $(id), out = $(vid);
+  function upd() { out.textContent = fmt(parseFloat(el.value)); apply(parseFloat(el.value)); }
+  el.addEventListener('input', upd); upd();
+}
+slider('sN', 'vN', function (v) { return v + ' ลำ'; }, function (v) {
+  if (v === S.params.n) return;
+  S.params.n = v; spawnDrones(v); buildDroneVisuals(); buildDroneCards();
+  logEv('sys', 'ปรับขนาดฝูงเป็น ' + v + ' ลำ');
+});
+slider('sRes', 'vRes', function (v) { return v + '%'; }, function (v) { S.params.reserve = v; });
+slider('sSens', 'vSens', function (v) { return v + ' ม.'; }, function (v) { S.params.sensor = v; });
+slider('sComm', 'vComm', function (v) { return v + ' ม.'; }, function (v) { S.params.comm = v; });
+slider('sWind', 'vWind', function (v) { return v.toFixed(1) + ' ม./วิ'; }, function (v) { S.wind.speed = v; });
+slider('sDir', 'vDir', function (v) { return ('00' + v).slice(-3) + '°'; }, function (v) { S.wind.dir = v; });
+slider('sRate', 'vRate', function (v) { return v.toFixed(2) + '×'; }, function (v) { S.params.rate = v; });
+slider('sSmoke', 'vSmoke', function (v) { return v.toFixed(2) + '×'; }, function (v) { S.params.smokeMul = v; });
+
+$('cPred').addEventListener('change', function () {
+  S.flags.predict = this.checked;
+  logEv('sys', this.checked ? 'เปิดโมดูลประมาณการพื้นที่รุกลาม' : 'ปิดโมดูลประมาณการ — รันแบบ baseline');
+});
+$('cCoop').addEventListener('change', function () { S.flags.coop = this.checked; });
+$('cEnergy').addEventListener('change', function () { S.flags.energy = this.checked; });
+
+$('btnPlay').addEventListener('click', function () {
+  S.running = !S.running;
+  this.textContent = S.running ? '⏸ หยุดชั่วคราว' : '▶ เดินหน้าต่อ';
+});
+$('btnReset').addEventListener('click', function () {
+  resetSim(false); buildDroneVisuals(); buildDroneCards();
+  paintTerrain(); paintTrees(); paintHazard();
+});
+document.querySelectorAll('[data-speed]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    S.speed = +b.dataset.speed;
+    document.querySelectorAll('[data-speed]').forEach(function (o) { o.classList.toggle('active', o === b); });
+  });
+});
+document.querySelectorAll('[data-layer]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var k = b.dataset.layer; layers[k] = !layers[k];
+    b.classList.toggle('active', layers[k]);
+  });
+});
+document.querySelectorAll('[data-layer3d]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var k = b.dataset.layer3d, on = !b.classList.contains('active');
+    b.classList.toggle('active', on);
+    if (k === 'hazard') { showHazard = on; hazMesh.visible = on; }
+    if (k === 'smoke') showSmoke = on;
+    if (k === 'paths') showPaths = on;
+    if (k === 'sensor') showSensor = on;
+  });
+});
+document.querySelectorAll('#camrow button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    if (b.dataset.cam === 'follow' && cam.mode === 'follow') cam.follow = (cam.follow + 1) % S.drones.length;
+    cam.mode = null; setCam(b.dataset.cam);
+  });
+});
+$('btnSnap').addEventListener('click', function () {
+  var m = S.metrics;
+  var snap = { detect: m.detect, detectCum: m.detectCum, meanDist: m.meanDist, energyWh: m.energyWh, survival: m.survival,
+               danger: m.danger, reroute: m.reroute, burnedArea: m.burnedArea || 0, t: S.t };
+  S.snaps[S.flags.predict ? 'model' : 'base'] = snap;
+  drawCmp();
+  logEv('sys', 'บันทึกผลรัน (' + (S.flags.predict ? 'มีโมเดลลุกลาม' : 'baseline') + ') ที่ T+' + fmtT(S.t));
+});
+$('btnClearSnap').addEventListener('click', function () { S.snaps = { model: null, base: null }; drawCmp(); });
+window.addEventListener('keydown', function (e) {
+  if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('btnPlay').click(); }
+});
+
+/* ============================ ลูปหลัก ============================ */
+buildDroneVisuals(); buildDroneCards(); paintTerrain(); paintTrees(); paintHazard(); drawCmp(); resize();
+
+var clock = new THREE.Clock(), hudAcc = 0, paintAcc = 0;
+function frame() {
+  requestAnimationFrame(frame);
+  var dt = Math.min(0.05, clock.getDelta()), now = clock.elapsedTime;
+  simulate(dt);
+
+  paintAcc += dt;
+  if (paintAcc > 0.16) {
+    paintTerrain(); paintTrees(); paintHazard();
+    paintAcc = 0;
+  }
+  updateFire(now);
+  updateSmoke3D(dt * S.speed);
+  updateDroneVisuals(dt, now);
+  applyCamera(dt);
+  if (window.__beacon) window.__beacon.material.color.setScalar(0.5 + 0.5 * Math.abs(Math.sin(now * 2)));
+
+  hudAcc += dt;
+  if (hudAcc > 0.2) {
+    updateMetrics(); updateDroneCards(); updateLog(); updateTop(); drawMap(); drawTrend();
+    hudAcc = 0;
+  }
+  if (view.clientWidth !== renderer.domElement.clientWidth || view.clientHeight !== renderer.domElement.clientHeight) resize();
+  renderer.render(scene, camera);
+}
+frame();
+
+})();
+</script>
+
+</body>
+</html>
