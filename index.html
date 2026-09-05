@@ -1,20 +1,6 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#131010">
-<meta name="description" content="ซิมูเลชัน 3D แบบเรียลไทม์ของฝูงโดรนสำรวจไฟป่า — โมเดลการวางเส้นทางภายใต้ข้อจำกัดพลังงาน หมอกควัน และความร้อน พร้อมโมเดลประมาณการพื้นที่รุกลามของไฟ">
-<meta property="og:type" content="website">
-<meta property="og:title" content="คอนโซลฝูงโดรนแนวไฟ · Firefront Swarm Console">
-<meta property="og:description" content="Prototype simulation: ฝูงโดรน 3–5 ลำ · แนวไฟลุกลาม (cellular automaton) · โซนความร้อน/หมอกควัน · แบตเตอรี่ · re-route แบบเรียลไทม์">
-<meta property="og:image" content="/preview.jpg">
-<meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🔥%3C/text%3E%3C/svg%3E">
-<style>html,body{margin:0}img{max-width:100%}</style>
-<title>คอนโซลฝูงโดรนแนวไฟ</title>
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}img{max-width:100%}</style><title>คอนโซลฝูงโดรนแนวไฟ</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
-<script src="/vendor/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
 :root{
   --ash-900:#131010; --ash-850:#191412; --ash-800:#1F1917;
@@ -193,9 +179,7 @@ table.cmp .empty{color:var(--dim)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
-</head>
-<body>
-<div id="app">
+</head><body><div id="app">
   <div id="topbar">
     <div id="brand">
       <b>คอนโซลฝูงโดรนแนวไฟ</b>
@@ -216,6 +200,9 @@ table.cmp .empty{color:var(--dim)}
         <div class="btnrow" style="margin-bottom:9px">
           <button class="primary" id="btnPlay" style="flex:1">⏸ หยุดชั่วคราว</button>
           <button id="btnReset">รีเซ็ต</button>
+        </div>
+        <div class="btnrow" style="margin-bottom:9px">
+          <button id="btnMoveBase" style="flex:1">ย้ายกองบัญชาการภาคพื้นดิน</button>
         </div>
         <div class="ctrl">
           <div class="ctrl-top"><label>ความเร็วจำลอง</label></div>
@@ -243,8 +230,8 @@ table.cmp .empty{color:var(--dim)}
           <input type="range" id="sSens" min="90" max="260" step="10" value="160">
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>ระยะสื่อสารระหว่างลำ</label><span class="ctrl-val" id="vComm">900 ม.</span></div>
-          <input type="range" id="sComm" min="400" max="2400" step="50" value="900">
+          <div class="ctrl-top"><label>ระยะสื่อสารระหว่างลำ</label><span class="ctrl-val" id="vComm">1500 ม.</span></div>
+          <input type="range" id="sComm" min="400" max="2600" step="50" value="1500">
         </div>
       </div>
 
@@ -313,7 +300,7 @@ table.cmp .empty{color:var(--dim)}
 
       <div class="overlay panel" id="mapwrap">
         <div class="maphead">
-          <span>แผนที่ไฟป่า 2D</span>
+          <span id="maptitle">แผนที่ไฟป่า 2D</span>
           <span id="mapinfo">— </span>
         </div>
         <canvas id="map2d" width="246" height="246"></canvas>
@@ -450,7 +437,7 @@ var S = {
   drones: [],
   base: { x: -820, z: 860 },
   wind: { speed: 7, dir: 45 },       // dir = direction wind blows TOWARD (deg, 0=north/-z)
-  params: { n: 5, reserve: 25, sensor: 160, comm: 900, rate: 1, smokeMul: 1 },
+  params: { n: 5, reserve: 25, sensor: 160, comm: 1500, rate: 1, smokeMul: 1 },
   flags: { predict: true, coop: true, energy: true },
   ev: [],
   metrics: {
@@ -506,6 +493,39 @@ function sampleField(F, wx, wz) {
   var x1 = Math.min(x0 + 1, G - 1), y1 = Math.min(y0 + 1, G - 1);
   return lerp(lerp(F[idx(x0, y0)], F[idx(x1, y0)], tx),
               lerp(F[idx(x0, y1)], F[idx(x1, y1)], tx), ty);
+}
+
+/* ------------------------- ฐานปฏิบัติการภาคพื้นดิน ------------------------- */
+/* เลือกที่ตั้งกองบัญชาการ: พื้นที่โล่ง ลาดชันต่ำ นอกแนวป่าทึบ ทางฝั่งตะวันออกของพื้นที่ */
+function pickBaseSite() {
+  var best = null, bs = -1e9;
+  for (var y = 20; y < 52; y++) for (var x = 34; x < 56; x++) {
+    var f = 0, n = 0, slope = 0, h0 = S.height[idx(x, y)];
+    for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) {
+      var xx = clamp(x + dx, 0, G - 1), yy = clamp(y + dy, 0, G - 1);
+      f += S.fuel0[idx(xx, yy)]; n++;
+      slope = Math.max(slope, Math.abs(S.height[idx(xx, yy)] - h0) / (CELL * Math.max(1, Math.hypot(dx, dy))));
+    }
+    f /= n;
+    var alt = h0 / MAXH;
+    var s = (1 - f) * 2.4 - slope * 3.2 - alt * 0.9 + (x >= 44 ? 0.35 : 0);
+    if (s > bs) { bs = s; best = [x, y]; }
+  }
+  var p = cellToWorld(best[0], best[1]);
+  S.base.x = p.x; S.base.z = p.z;
+  return S.base;
+}
+/* ถางพื้นที่ตั้งแคมป์ — ไม่มีเชื้อเพลิง จึงไม่มีต้นไม้และไฟลามเข้าไม่ถึง */
+function carveClearing(wx, wz, r) {
+  var cx = worldToCellX(wx), cy = worldToCellX(wz), rc = Math.ceil(r / CELL) + 1;
+  for (var y = Math.max(0, cy - rc); y <= Math.min(G - 1, cy + rc); y++)
+    for (var x = Math.max(0, cx - rc); x <= Math.min(G - 1, cx + rc); x++) {
+      var p = cellToWorld(x, y), d = Math.hypot(p.x - wx, p.z - wz);
+      if (d > r) continue;
+      var i = idx(x, y);
+      S.fuel0[i] = S.fuel[i] = 0;
+      if (S.state[i] === 1) { S.state[i] = 2; S.inten[i] = 0; }
+    }
 }
 
 /* ------------------------- fire cellular automaton ------------------------- */
@@ -1038,6 +1058,8 @@ function simulate(dtReal) {
 }
 /* ---------- bootstrap world before the 3D scene reads it ---------- */
 buildTerrain(S.seed);
+pickBaseSite();                       // เลือกที่โล่งสำหรับกองบัญชาการภาคพื้นดิน
+carveClearing(S.base.x, S.base.z, 135);
 resetSim(true);
 /* ============================ ฉาก 3D (Three.js) ============================ */
 var view = document.getElementById('view');
@@ -1090,6 +1112,7 @@ var terrain = new THREE.Mesh(terrGeo, new THREE.MeshStandardMaterial({
 }));
 scene.add(terrain);
 
+var C_BARE = new THREE.Color(0x6B5D46);
 var C_FOREST = new THREE.Color(0x35482A), C_DRY = new THREE.Color(0x554F30),
     C_ROCK = new THREE.Color(0x4A423A), C_BURN = new THREE.Color(0xFF5A18),
     C_CHAR = new THREE.Color(0x201A17), tmpC = new THREE.Color();
@@ -1101,6 +1124,7 @@ function paintTerrain() {
     var alt = S.height[i] / MAXH, f0 = S.fuel0[i];
     tmpC.copy(C_FOREST).lerp(C_DRY, 1 - f0);
     tmpC.lerp(C_ROCK, clamp((alt - 0.6) * 2.1, 0, 0.85));
+    if (f0 < 0.06) tmpC.lerp(C_BARE, 0.85);                     // ที่โล่ง / ลำห้วย / ลานจอด
     if (S.state[i] === 2) tmpC.lerp(C_CHAR, 0.92);
     else if (S.state[i] === 1) {
       var burnt = 1 - S.fuel[i] / Math.max(0.02, f0);
@@ -1158,6 +1182,7 @@ var C_TREE = new THREE.Color(0x3E5626), C_TREE_DRY = new THREE.Color(0x5C572A),
 function paintTrees() {
   for (var k = 0; k < treeCells.length; k++) {
     var t = treeCells[k], st = S.state[t.i], sc = t.s, y = heightAt(t.x, t.z);
+    if (S.fuel0[t.i] < 0.02) sc = 0;                       // พื้นที่ถางเป็นแคมป์
     tmpC.copy(C_TREE).lerp(C_TREE_DRY, 1 - S.fuel0[t.i]);
     if (st === 1) { tmpC.lerp(C_TREE_FIRE, clamp(S.inten[t.i], 0, 1) * 0.9); sc *= 1 - 0.35 * clamp(S.inten[t.i], 0, 1); }
     else if (st === 2) { tmpC.copy(C_TREE_ASH); sc *= 0.42; }
@@ -1276,25 +1301,83 @@ function updateSmoke3D(dt) {
   smGeo.attributes.aAlpha.needsUpdate = true; smGeo.attributes.aCol.needsUpdate = true;
 }
 
-/* ---- base station ---- */
-(function () {
-  var g = new THREE.Group();
-  var pad = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 6, 20),
-    new THREE.MeshStandardMaterial({ color: 0x2A2723, roughness: 0.9 }));
-  var ring = new THREE.Mesh(new THREE.TorusGeometry(38, 2.4, 6, 28),
-    new THREE.MeshBasicMaterial({ color: 0x59B7B0 }));
-  ring.rotation.x = Math.PI / 2; ring.position.y = 4;
-  var mast = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.6, 78, 6),
-    new THREE.MeshStandardMaterial({ color: 0x3A342E }));
-  mast.position.set(46, 39, 0);
-  var beacon = new THREE.Mesh(new THREE.SphereGeometry(5, 10, 8),
-    new THREE.MeshBasicMaterial({ color: 0x59B7B0 }));
-  beacon.position.set(46, 80, 0);
-  g.add(pad, ring, mast, beacon);
-  g.position.set(S.base.x, heightAt(S.base.x, S.base.z) + 3, S.base.z);
-  scene.add(g);
+/* ---- กองบัญชาการภาคพื้นดิน (ground command post) ---- */
+function helipadTex() {
+  var c = document.createElement('canvas'); c.width = c.height = 256;
+  var g = c.getContext('2d');
+  g.fillStyle = '#26231F'; g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = '#6F675C'; g.lineWidth = 6;
+  g.beginPath(); g.arc(128, 128, 96, 0, 6.283); g.stroke();
+  g.strokeStyle = '#D8CDBC'; g.lineWidth = 18; g.lineCap = 'square';
+  g.beginPath();
+  g.moveTo(92, 74); g.lineTo(92, 182); g.moveTo(164, 74); g.lineTo(164, 182);
+  g.moveTo(92, 128); g.lineTo(164, 128);
+  g.stroke();
+  return new THREE.CanvasTexture(c);
+}
+
+var baseGroup = new THREE.Group();
+(function buildBase() {
+  var matDark = new THREE.MeshStandardMaterial({ color: 0x2E2A25, roughness: 0.92 });
+  var matCanvasTent = new THREE.MeshStandardMaterial({ color: 0x6C6A5A, roughness: 1, flatShading: true });
+  var matSteel = new THREE.MeshStandardMaterial({ color: 0x3C3630, roughness: 0.7, metalness: 0.35 });
+
+  var apron = new THREE.Mesh(new THREE.CylinderGeometry(120, 126, 3, 28), matDark);
+  apron.position.y = -1; baseGroup.add(apron);
+
+  var pad = new THREE.Mesh(new THREE.CylinderGeometry(46, 46, 2.4, 28),
+    new THREE.MeshStandardMaterial({ map: helipadTex(), roughness: 0.95 }));
+  pad.position.set(-34, 2, 20); baseGroup.add(pad);
+
+  // เต็นท์ศูนย์บัญชาการ + ตู้คอนเทนเนอร์อุปกรณ์
+  var tent = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 26, 20, 4), matCanvasTent);
+  tent.position.set(52, 10, -30); tent.rotation.y = Math.PI / 4; baseGroup.add(tent);
+  var tent2 = tent.clone(); tent2.scale.setScalar(0.72); tent2.position.set(58, 7, 22); baseGroup.add(tent2);
+
+  var box = new THREE.Mesh(new THREE.BoxGeometry(34, 15, 15), matSteel);
+  box.position.set(6, 7, -66); box.rotation.y = 0.22; baseGroup.add(box);
+  var box2 = box.clone(); box2.scale.set(0.7, 0.9, 1); box2.position.set(-38, 6, -70); box2.rotation.y = -0.1;
+  baseGroup.add(box2);
+
+  // รถบัญชาการ
+  var truck = new THREE.Group();
+  truck.add(new THREE.Mesh(new THREE.BoxGeometry(26, 11, 12), new THREE.MeshStandardMaterial({ color: 0x54402A, roughness: 0.85 })));
+  var cab = new THREE.Mesh(new THREE.BoxGeometry(9, 8, 11), new THREE.MeshStandardMaterial({ color: 0x453522, roughness: 0.85 }));
+  cab.position.set(-15, 1.5, 0); truck.add(cab);
+  truck.position.set(-6, 7, 62); truck.rotation.y = -0.5; baseGroup.add(truck);
+
+  // เสาสื่อสาร + จานรับสัญญาณ
+  var mast = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.6, 96, 6), matSteel);
+  mast.position.set(74, 48, -2); baseGroup.add(mast);
+  var dish = new THREE.Mesh(new THREE.SphereGeometry(9, 12, 8, 0, 6.283, 0, 1.0),
+    new THREE.MeshStandardMaterial({ color: 0x8C8578, roughness: 0.6, side: THREE.DoubleSide }));
+  dish.position.set(74, 78, -2); dish.rotation.set(-0.9, 0, 0.4); baseGroup.add(dish);
+  var beacon = new THREE.Mesh(new THREE.SphereGeometry(4.2, 10, 8), new THREE.MeshBasicMaterial({ color: 0x59B7B0 }));
+  beacon.position.set(74, 98, -2); baseGroup.add(beacon);
   window.__beacon = beacon;
+
+  // เสาไฟรอบแคมป์
+  for (var a = 0; a < 6; a++) {
+    var ang = a / 6 * Math.PI * 2 + 0.4;
+    var pole = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.4, 26, 5), matSteel);
+    pole.position.set(Math.cos(ang) * 104, 13, Math.sin(ang) * 104); baseGroup.add(pole);
+    var lamp = new THREE.Mesh(new THREE.SphereGeometry(2.6, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xF3D9A6 }));
+    lamp.position.set(Math.cos(ang) * 104, 27, Math.sin(ang) * 104); baseGroup.add(lamp);
+  }
+
+  // วงแหวนแสดงขอบเขตแคมป์
+  var ring = new THREE.Mesh(new THREE.RingGeometry(118, 124, 44),
+    new THREE.MeshBasicMaterial({ color: 0x59B7B0, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 2.5; baseGroup.add(ring);
+
+  scene.add(baseGroup);
 })();
+
+function placeBase() {
+  baseGroup.position.set(S.base.x, heightAt(S.base.x, S.base.z) + 2, S.base.z);
+}
+placeBase();
 
 /* ---- drone visuals ---- */
 var droneRoot = new THREE.Group(); scene.add(droneRoot);
@@ -1771,6 +1854,32 @@ $('cPred').addEventListener('change', function () {
 $('cCoop').addEventListener('change', function () { S.flags.coop = this.checked; });
 $('cEnergy').addEventListener('change', function () { S.flags.energy = this.checked; });
 
+var moveBaseMode = false;
+$('btnMoveBase').addEventListener('click', function () {
+  moveBaseMode = !moveBaseMode;
+  this.classList.toggle('seg', false);
+  this.style.background = moveBaseMode ? 'rgba(89,183,176,.18)' : '';
+  this.style.borderColor = moveBaseMode ? 'var(--teal-dim)' : '';
+  mapCv.style.cursor = moveBaseMode ? 'crosshair' : '';
+  $('maptitle').textContent = moveBaseMode ? 'คลิกเลือกจุดตั้งกองบัญชาการ' : 'แผนที่ไฟป่า 2D';
+});
+mapCv.addEventListener('click', function (ev) {
+  if (!moveBaseMode) return;
+  var r = mapCv.getBoundingClientRect();
+  var wx = clamp((ev.clientX - r.left) / r.width * WORLD - HALF, -HALF + 160, HALF - 160);
+  var wz = clamp((ev.clientY - r.top) / r.height * WORLD - HALF, -HALF + 160, HALF - 160);
+  S.base.x = wx; S.base.z = wz;
+  carveClearing(wx, wz, 135);
+  placeBase(); paintTerrain(); paintTrees(); paintHazard();
+  S.drones.forEach(function (d) {
+    if (d.state === 'RETURN' || d.state === 'CHARGE') { d.tx = wx; d.tz = wz; d.ti = -1; }
+  });
+  logEv('sys', 'ย้ายกองบัญชาการภาคพื้นดินไปพิกัด (' + Math.round(wx) + ', ' + Math.round(wz) + ') ม. — ถางพื้นที่รัศมี 135 ม.');
+  moveBaseMode = false;
+  $('btnMoveBase').style.background = ''; $('btnMoveBase').style.borderColor = '';
+  mapCv.style.cursor = ''; $('maptitle').textContent = 'แผนที่ไฟป่า 2D';
+});
+
 $('btnPlay').addEventListener('click', function () {
   S.running = !S.running;
   this.textContent = S.running ? '⏸ หยุดชั่วคราว' : '▶ เดินหน้าต่อ';
@@ -1852,6 +1961,4 @@ frame();
 
 })();
 </script>
-
-</body>
-</html>
+</body></html>
