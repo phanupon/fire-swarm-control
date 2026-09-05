@@ -1,6 +1,20 @@
-<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}img{max-width:100%}</style><title>คอนโซลฝูงโดรนแนวไฟ</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#131010">
+<meta name="description" content="ซิมูเลชัน 3D แบบเรียลไทม์ของฝูงโดรนสำรวจไฟป่า — โมเดลการวางเส้นทางภายใต้ข้อจำกัดพลังงาน หมอกควัน และความร้อน พร้อมโมเดลประมาณการพื้นที่รุกลามของไฟ">
+<meta property="og:type" content="website">
+<meta property="og:title" content="คอนโซลฝูงโดรนแนวไฟ · Firefront Swarm Console">
+<meta property="og:description" content="Prototype simulation: ฝูงโดรน 3–5 ลำ · แนวไฟลุกลาม (cellular automaton) · โซนความร้อน/หมอกควัน · แบตเตอรี่ · re-route แบบเรียลไทม์">
+<meta property="og:image" content="/preview.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🔥%3C/text%3E%3C/svg%3E">
+<style>html,body{margin:0}img{max-width:100%}</style>
+<title>คอนโซลฝูงโดรนแนวไฟ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<script src="/vendor/three.min.js"></script>
 <style>
 :root{
   --ash-900:#131010; --ash-850:#191412; --ash-800:#1F1917;
@@ -9,7 +23,7 @@
   --teal:#59B7B0; --teal-dim:#2E6C69;
   --fire:#FF6E2C; --heat:#E23B2A; --smoke:#9C958C; --safe:#93C46E; --warn:#EDB44B;
   --mono:"IBM Plex Mono","SFMono-Regular",Menlo,monospace;
-  --sans:"IBM Plex Sans Thai","IBM Plex Sans",-apple-system,"Segoe UI",sans-serif;
+  --sans:"IBM Plex Sans Thai","Noto Sans SC","IBM Plex Sans",-apple-system,"Segoe UI",sans-serif;
 }
 *{box-sizing:border-box}
 body{
@@ -37,6 +51,14 @@ body{
 }
 .pill.on{color:var(--teal); border-color:var(--teal-dim); background:rgba(89,183,176,.09)}
 .pill.alarm{color:var(--heat); border-color:#5C2A22; background:rgba(226,59,42,.12)}
+#langsw{display:flex; border:1px solid var(--line); border-radius:3px; overflow:hidden}
+#langsw button{
+  border:none; border-radius:0; padding:4px 9px; background:transparent; color:var(--muted);
+  font-family:var(--mono); font-size:11px; letter-spacing:.06em; border-left:1px solid var(--line-soft);
+}
+#langsw button:first-child{border-left:none}
+#langsw button:hover{background:#2A231E; color:var(--bone)}
+#langsw button.active{background:rgba(89,183,176,.16); color:#BFEDE9}
 
 /* ---------- shell ---------- */
 #shell{display:grid; grid-template-columns:262px minmax(0,1fr) 306px; min-height:0}
@@ -179,33 +201,40 @@ table.cmp .empty{color:var(--dim)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
-</head><body><div id="app">
+</head>
+<body>
+<div id="app">
   <div id="topbar">
     <div id="brand">
-      <b>คอนโซลฝูงโดรนแนวไฟ</b>
-      <span>Firefront Swarm Console · R&amp;D Prototype</span>
+      <b data-i18n="brand.name">คอนโซลฝูงโดรนแนวไฟ</b>
+      <span data-i18n="brand.sub">Firefront Swarm Console · R&amp;D Prototype</span>
     </div>
     <div class="tb-spacer"></div>
+    <div id="langsw" role="group" aria-label="Language">
+      <button data-lang="th" class="active">ไทย</button>
+      <button data-lang="en">EN</button>
+      <button data-lang="zh">中文</button>
+    </div>
     <div class="pill" id="pillMode">โหมด: พยากรณ์การลุกลาม</div>
     <div class="pill" id="pillComm">COMM 5/5</div>
     <div class="pill" id="pillAlarm">แนวไฟ 0 เซลล์</div>
-    <div class="clock"><small>MISSION T+</small><span id="clock">00:00</span></div>
+    <div class="clock"><small data-i18n="clock.label">MISSION T+</small><span id="clock">00:00</span></div>
   </div>
 
   <div id="shell">
     <!-- ============ LEFT RAIL ============ -->
     <div class="rail" id="left">
       <div class="sec">
-        <h3 class="sec-h">การควบคุมภารกิจ</h3>
+        <h3 class="sec-h" data-i18n="sec.mission">การควบคุมภารกิจ</h3>
         <div class="btnrow" style="margin-bottom:9px">
           <button class="primary" id="btnPlay" style="flex:1">⏸ หยุดชั่วคราว</button>
-          <button id="btnReset">รีเซ็ต</button>
+          <button id="btnReset" data-i18n="btn.reset">รีเซ็ต</button>
         </div>
         <div class="btnrow" style="margin-bottom:9px">
-          <button id="btnMoveBase" style="flex:1">ย้ายกองบัญชาการภาคพื้นดิน</button>
+          <button id="btnMoveBase" style="flex:1" data-i18n="btn.movebase">ย้ายกองบัญชาการภาคพื้นดิน</button>
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>ความเร็วจำลอง</label></div>
+          <div class="ctrl-top"><label data-i18n="lbl.simspeed">ความเร็วจำลอง</label></div>
           <div class="btnrow">
             <button class="seg" data-speed="1">1×</button>
             <button class="seg active" data-speed="2">2×</button>
@@ -216,72 +245,72 @@ table.cmp .empty{color:var(--dim)}
       </div>
 
       <div class="sec">
-        <h3 class="sec-h">พารามิเตอร์ฝูงโดรน</h3>
+        <h3 class="sec-h" data-i18n="sec.swarm">พารามิเตอร์ฝูงโดรน</h3>
         <div class="ctrl">
-          <div class="ctrl-top"><label>จำนวนโดรน</label><span class="ctrl-val" id="vN">5 ลำ</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.n">จำนวนโดรน</label><span class="ctrl-val" id="vN">5 ลำ</span></div>
           <input type="range" id="sN" min="3" max="5" step="1" value="5">
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>เกณฑ์พลังงานสำรอง</label><span class="ctrl-val" id="vRes">25%</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.reserve">เกณฑ์พลังงานสำรอง</label><span class="ctrl-val" id="vRes">25%</span></div>
           <input type="range" id="sRes" min="10" max="40" step="1" value="25">
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>รัศมีเซ็นเซอร์</label><span class="ctrl-val" id="vSens">160 ม.</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.sensor">รัศมีเซ็นเซอร์</label><span class="ctrl-val" id="vSens">160 ม.</span></div>
           <input type="range" id="sSens" min="90" max="260" step="10" value="160">
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>ระยะสื่อสารระหว่างลำ</label><span class="ctrl-val" id="vComm">1500 ม.</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.comm">ระยะสื่อสารระหว่างลำ</label><span class="ctrl-val" id="vComm">1500 ม.</span></div>
           <input type="range" id="sComm" min="400" max="2600" step="50" value="1500">
         </div>
       </div>
 
       <div class="sec">
-        <h3 class="sec-h">สภาพแวดล้อมไฟป่า</h3>
+        <h3 class="sec-h" data-i18n="sec.env">สภาพแวดล้อมไฟป่า</h3>
         <div class="ctrl">
-          <div class="ctrl-top"><label>ความเร็วลม</label><span class="ctrl-val" id="vWind">7.0 ม./วิ</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.wind">ความเร็วลม</label><span class="ctrl-val" id="vWind">7.0 ม./วิ</span></div>
           <input type="range" id="sWind" min="0" max="16" step="0.5" value="7">
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>ทิศทางลม</label><span class="ctrl-val" id="vDir">045°</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.dir">ทิศทางลม</label><span class="ctrl-val" id="vDir">045°</span></div>
           <input type="range" id="sDir" min="0" max="355" step="5" value="45">
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>อัตราการลุกลาม</label><span class="ctrl-val" id="vRate">1.00×</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.rate">อัตราการลุกลาม</label><span class="ctrl-val" id="vRate">1.00×</span></div>
           <input type="range" id="sRate" min="0.4" max="2.2" step="0.05" value="1">
         </div>
         <div class="ctrl">
-          <div class="ctrl-top"><label>ความหนาแน่นหมอกควัน</label><span class="ctrl-val" id="vSmoke">1.00×</span></div>
+          <div class="ctrl-top"><label data-i18n="lbl.smokeden">ความหนาแน่นหมอกควัน</label><span class="ctrl-val" id="vSmoke">1.00×</span></div>
           <input type="range" id="sSmoke" min="0.3" max="2.5" step="0.1" value="1">
         </div>
       </div>
 
       <div class="sec">
-        <h3 class="sec-h">โมเดลวางเส้นทาง</h3>
+        <h3 class="sec-h" data-i18n="sec.model">โมเดลวางเส้นทาง</h3>
         <label class="toggle">
           <input type="checkbox" id="cPred" checked>
-          <span class="t-txt"><b>โมดูลประมาณการพื้นที่รุกลาม</b><i>คาดการณ์แนวไฟล่วงหน้า 90 วินาที แล้วหลบล่วงหน้า — ปิดเพื่อรันแบบ baseline</i></span>
+          <span class="t-txt"><b data-i18n="tog.pred">โมดูลประมาณการพื้นที่รุกลาม</b><i data-i18n="tog.pred.d">คาดการณ์แนวไฟล่วงหน้า 90 วินาที แล้วหลบล่วงหน้า — ปิดเพื่อรันแบบ baseline</i></span>
         </label>
         <label class="toggle">
           <input type="checkbox" id="cCoop" checked>
-          <span class="t-txt"><b>ประสานงานฝูงแบบกระจายศูนย์</b><i>แชร์ belief และตำแหน่งในระยะสื่อสาร ลดการสำรวจซ้ำซ้อน</i></span>
+          <span class="t-txt"><b data-i18n="tog.coop">ประสานงานฝูงแบบกระจายศูนย์</b><i data-i18n="tog.coop.d">แชร์ belief และตำแหน่งในระยะสื่อสาร ลดการสำรวจซ้ำซ้อน</i></span>
         </label>
         <label class="toggle">
           <input type="checkbox" id="cEnergy" checked>
-          <span class="t-txt"><b>โมดูลจัดการพลังงาน</b><i>บังคับกลับฐานเมื่อพลังงานเหลือต่ำกว่าเกณฑ์สำรอง</i></span>
+          <span class="t-txt"><b data-i18n="tog.energy">โมดูลจัดการพลังงาน</b><i data-i18n="tog.energy.d">บังคับกลับฐานเมื่อพลังงานเหลือต่ำกว่าเกณฑ์สำรอง</i></span>
         </label>
       </div>
 
       <div class="sec">
-        <h3 class="sec-h">ชั้นข้อมูลในฉาก 3D</h3>
+        <h3 class="sec-h" data-i18n="sec.layers">ชั้นข้อมูลในฉาก 3D</h3>
         <div class="btnrow">
-          <button class="seg active" data-layer3d="hazard">โซนความร้อน</button>
-          <button class="seg active" data-layer3d="smoke">ควัน</button>
+          <button class="seg active" data-layer3d="hazard" data-i18n="btn.heatzone">โซนความร้อน</button>
+          <button class="seg active" data-layer3d="smoke" data-i18n="btn.smoke">ควัน</button>
         </div>
         <div class="btnrow" style="margin-top:6px">
-          <button class="seg active" data-layer3d="paths">เส้นทาง</button>
-          <button class="seg active" data-layer3d="sensor">กรวยเซ็นเซอร์</button>
+          <button class="seg active" data-layer3d="paths" data-i18n="btn.paths">เส้นทาง</button>
+          <button class="seg active" data-layer3d="sensor" data-i18n="btn.sensorcone">กรวยเซ็นเซอร์</button>
         </div>
-        <p class="note">ลากเมาส์เพื่อหมุนกล้อง · ล้อเลื่อนเพื่อซูม · คลิกขวาลากเพื่อเลื่อน</p>
+        <p class="note" data-i18n="note.camera">ลากเมาส์เพื่อหมุนกล้อง · ล้อเลื่อนเพื่อซูม · คลิกขวาลากเพื่อเลื่อน</p>
       </div>
     </div>
 
@@ -289,13 +318,13 @@ table.cmp .empty{color:var(--dim)}
     <div id="view">
       <canvas id="gl"></canvas>
 
-      <div class="overlay panel" id="hint">ภูมิประเทศจำลอง 2.4 × 2.4 กม. · กริด 60 × 60 เซลล์ (40 ม./เซลล์)</div>
+      <div class="overlay panel" id="hint" data-i18n="hint.terrain">ภูมิประเทศจำลอง 2.4 × 2.4 กม. · กริด 60 × 60 เซลล์ (40 ม./เซลล์)</div>
 
       <div class="overlay" id="camrow">
-        <button class="active" data-cam="orbit">มุมกว้าง</button>
-        <button data-cam="follow">ตามโดรน</button>
-        <button data-cam="front">แนวไฟ</button>
-        <button data-cam="top">แผนที่</button>
+        <button class="active" data-cam="orbit" data-i18n="cam.orbit">มุมกว้าง</button>
+        <button data-cam="follow" data-i18n="cam.follow">ตามโดรน</button>
+        <button data-cam="front" data-i18n="cam.front">แนวไฟ</button>
+        <button data-cam="top" data-i18n="cam.top">แผนที่</button>
       </div>
 
       <div class="overlay panel" id="mapwrap">
@@ -305,17 +334,17 @@ table.cmp .empty{color:var(--dim)}
         </div>
         <canvas id="map2d" width="246" height="246"></canvas>
         <div class="layers">
-          <button class="active" data-layer="fire">ไฟ</button>
-          <button class="active" data-layer="smoke">ควัน</button>
-          <button data-layer="heat">ความร้อน</button>
-          <button data-layer="belief">Belief</button>
-          <button class="active" data-layer="track">เส้นทาง</button>
+          <button class="active" data-layer="fire" data-i18n="layer.fire">ไฟ</button>
+          <button class="active" data-layer="smoke" data-i18n="layer.smoke">ควัน</button>
+          <button data-layer="heat" data-i18n="layer.heat">ความร้อน</button>
+          <button data-layer="belief" data-i18n="layer.belief">Belief</button>
+          <button class="active" data-layer="track" data-i18n="layer.track">เส้นทาง</button>
         </div>
-        <div class="mapscale"><span class="bar"></span><span>500 ม.</span><span style="margin-left:auto" id="windlabel">ลม 045° 7.0 ม./วิ</span></div>
+        <div class="mapscale"><span class="bar"></span><span id="mapscale">500 ม.</span><span style="margin-left:auto" id="windlabel">ลม 045° 7.0 ม./วิ</span></div>
       </div>
 
       <div class="overlay panel" id="log">
-        <div class="lh">บันทึกเหตุการณ์ปฏิบัติการ</div>
+        <div class="lh" data-i18n="log.title">บันทึกเหตุการณ์ปฏิบัติการ</div>
         <div id="logrows"></div>
       </div>
     </div>
@@ -323,32 +352,32 @@ table.cmp .empty{color:var(--dim)}
     <!-- ============ RIGHT RAIL ============ -->
     <div class="rail" id="right">
       <div class="sec" style="padding-bottom:6px">
-        <h3 class="sec-h">ตัวชี้วัดตามบทความ</h3>
+        <h3 class="sec-h" data-i18n="sec.metrics">ตัวชี้วัดตามบทความ</h3>
         <div id="metrics"></div>
         <canvas id="trend" width="560" height="112"></canvas>
         <div class="legend">
-          <span><i style="background:#59B7B0"></i>สัดส่วนไฟที่ตรวจพบ</span>
-          <span><i style="background:#EDB44B"></i>พลังงานเฉลี่ย</span>
-          <span><i style="background:#E23B2A"></i>พื้นที่ไฟ</span>
+          <span><i style="background:#59B7B0"></i><b style="font-weight:400" data-i18n="legend.det">สัดส่วนไฟที่ตรวจพบ</b></span>
+          <span><i style="background:#EDB44B"></i><b style="font-weight:400" data-i18n="legend.batt">พลังงานเฉลี่ย</b></span>
+          <span><i style="background:#E23B2A"></i><b style="font-weight:400" data-i18n="legend.fire">พื้นที่ไฟ</b></span>
         </div>
       </div>
 
       <div class="sec" style="padding:10px 0 0">
-        <h3 class="sec-h" style="padding:0 14px">สถานะรายลำ</h3>
+        <h3 class="sec-h" style="padding:0 14px" data-i18n="sec.status">สถานะรายลำ</h3>
         <div id="drones"></div>
       </div>
 
       <div class="sec">
-        <h3 class="sec-h">ตารางเปรียบเทียบ baseline</h3>
+        <h3 class="sec-h" data-i18n="sec.cmp">ตารางเปรียบเทียบ baseline</h3>
         <table class="cmp">
-          <thead><tr><th>ตัวชี้วัด</th><th>มีโมเดลลุกลาม</th><th>Baseline</th></tr></thead>
+          <thead><tr><th data-i18n="cmp.metric">ตัวชี้วัด</th><th data-i18n="cmp.model">มีโมเดลลุกลาม</th><th data-i18n="cmp.base">Baseline</th></tr></thead>
           <tbody id="cmpbody"></tbody>
         </table>
         <div class="btnrow" style="margin-top:9px">
-          <button id="btnSnap" style="flex:1">บันทึกผลรันปัจจุบัน</button>
-          <button id="btnClearSnap">ล้าง</button>
+          <button id="btnSnap" style="flex:1" data-i18n="btn.snap">บันทึกผลรันปัจจุบัน</button>
+          <button id="btnClearSnap" data-i18n="btn.clearsnap">ล้าง</button>
         </div>
-        <p class="note">บันทึกผลของรันปัจจุบันลงคอลัมน์ตามโหมดที่เปิดอยู่ เพื่อใช้เป็นตารางเปรียบเทียบในหัวข้อ 4 ผลการวิจัย</p>
+        <p class="note" data-i18n="note.snap">บันทึกผลของรันปัจจุบันลงคอลัมน์ตามโหมดที่เปิดอยู่ เพื่อใช้เป็นตารางเปรียบเทียบในหัวข้อ 4 ผลการวิจัย</p>
       </div>
     </div>
   </div>
@@ -675,11 +704,264 @@ function pathHazard(ax, az, bx, bz, n) {
   return { max: mx, mean: sum / n };
 }
 window.__hazardAt = hazardAt;
+/* ============================ i18n: ไทย / English / 中文 ============================ */
+var STR = {
+  th: {
+    'brand.name': 'คอนโซลฝูงโดรนแนวไฟ',
+    'brand.sub': 'Firefront Swarm Console · R&D Prototype',
+    'pill.mode.pred': 'โหมด: พยากรณ์การลุกลาม',
+    'pill.mode.base': 'โหมด: baseline (ไม่พยากรณ์)',
+    'pill.fire': 'แนวไฟ {0} {1}',
+    'clock.label': 'MISSION T+',
+    'sec.mission': 'การควบคุมภารกิจ',
+    'btn.pause': '⏸ หยุดชั่วคราว', 'btn.resume': '▶ เดินหน้าต่อ', 'btn.reset': 'รีเซ็ต',
+    'btn.movebase': 'ย้ายกองบัญชาการภาคพื้นดิน',
+    'lbl.simspeed': 'ความเร็วจำลอง',
+    'sec.swarm': 'พารามิเตอร์ฝูงโดรน',
+    'lbl.n': 'จำนวนโดรน', 'lbl.reserve': 'เกณฑ์พลังงานสำรอง',
+    'lbl.sensor': 'รัศมีเซ็นเซอร์', 'lbl.comm': 'ระยะสื่อสารระหว่างลำ',
+    'sec.env': 'สภาพแวดล้อมไฟป่า',
+    'lbl.wind': 'ความเร็วลม', 'lbl.dir': 'ทิศทางลม',
+    'lbl.rate': 'อัตราการลุกลาม', 'lbl.smokeden': 'ความหนาแน่นหมอกควัน',
+    'sec.model': 'โมเดลวางเส้นทาง',
+    'tog.pred': 'โมดูลประมาณการพื้นที่รุกลาม',
+    'tog.pred.d': 'คาดการณ์แนวไฟล่วงหน้า 90 วินาที แล้วหลบล่วงหน้า — ปิดเพื่อรันแบบ baseline',
+    'tog.coop': 'ประสานงานฝูงแบบกระจายศูนย์',
+    'tog.coop.d': 'แชร์ belief และตำแหน่งในระยะสื่อสาร ลดการสำรวจซ้ำซ้อน',
+    'tog.energy': 'โมดูลจัดการพลังงาน',
+    'tog.energy.d': 'บังคับกลับฐานเมื่อพลังงานเหลือต่ำกว่าเกณฑ์สำรอง',
+    'sec.layers': 'ชั้นข้อมูลในฉาก 3D',
+    'btn.heatzone': 'โซนความร้อน', 'btn.smoke': 'ควัน', 'btn.paths': 'เส้นทาง', 'btn.sensorcone': 'กรวยเซ็นเซอร์',
+    'note.camera': 'ลากเมาส์เพื่อหมุนกล้อง · ล้อเลื่อนเพื่อซูม · คลิกขวาลากเพื่อเลื่อน',
+    'hint.terrain': 'ภูมิประเทศจำลอง 2.4 × 2.4 กม. · กริด 60 × 60 เซลล์ (40 ม./เซลล์)',
+    'cam.orbit': 'มุมกว้าง', 'cam.follow': 'ตามโดรน', 'cam.front': 'แนวไฟ', 'cam.top': 'แผนที่',
+    'map.title': 'แผนที่ไฟป่า 2D', 'map.pick': 'คลิกเลือกจุดตั้งกองบัญชาการ',
+    'map.info': 'belief {0}% · สำรวจ {1}%',
+    'map.wind': 'ลม {0}° {1} {2}',
+    'layer.fire': 'ไฟ', 'layer.smoke': 'ควัน', 'layer.heat': 'ความร้อน', 'layer.belief': 'Belief', 'layer.track': 'เส้นทาง',
+    'log.title': 'บันทึกเหตุการณ์ปฏิบัติการ',
+    'sec.metrics': 'ตัวชี้วัดตามบทความ',
+    'sec.status': 'สถานะรายลำ',
+    'sec.cmp': 'ตารางเปรียบเทียบ baseline',
+    'cmp.metric': 'ตัวชี้วัด', 'cmp.model': 'มีโมเดลลุกลาม', 'cmp.base': 'Baseline',
+    'cmp.time': 'เวลาภารกิจ (มม:วว)',
+    'btn.snap': 'บันทึกผลรันปัจจุบัน', 'btn.clearsnap': 'ล้าง',
+    'note.snap': 'บันทึกผลของรันปัจจุบันลงคอลัมน์ตามโหมดที่เปิดอยู่ เพื่อใช้เป็นตารางเปรียบเทียบในหัวข้อ 4 ผลการวิจัย',
+    'legend.det': 'สัดส่วนไฟที่ตรวจพบ', 'legend.batt': 'พลังงานเฉลี่ย', 'legend.fire': 'พื้นที่ไฟ',
+    'm.detect': 'สัดส่วนแนวไฟปัจจุบันที่ตรวจพบ',
+    'm.detectCum': 'ตรวจพบสะสมของพื้นที่ที่เคยลุกไหม้',
+    'm.dist': 'ระยะห่างเฉลี่ยจากแนวไฟ',
+    'm.energy': 'พลังงานที่ใช้รวม',
+    'm.surv': 'อัตราการรอดของฝูงโดรน',
+    'm.t80': 'เวลาครอบคลุมแนวไฟ 80%',
+    'm.area': 'พื้นที่เผาไหม้สะสม',
+    'm.danger': 'เข้าเขตอันตราย / re-route',
+    'm.survey': 'พื้นที่ที่สำรวจแล้ว',
+    'c.detect': 'ตรวจพบแนวไฟ (%)', 'c.detectCum': 'ตรวจพบสะสม (%)', 'c.meanDist': 'ระยะห่างแนวไฟ ({0})',
+    'c.energyWh': 'พลังงาน (Wh)', 'c.survival': 'อัตรารอด (%)', 'c.danger': 'เข้าเขตอันตราย',
+    'c.reroute': 're-route', 'c.burnedArea': 'พื้นที่เผาไหม้ ({0})',
+    'd.batt': 'แบตเตอรี่', 'd.dist': 'ห่างแนวไฟ', 'd.det': 'ตรวจพบ',
+    'st.SURVEY': 'สำรวจ', 'st.RETURN': 'กลับฐาน', 'st.CHARGE': 'เปลี่ยนแบต', 'st.LOST': 'สูญเสีย',
+    'st.nolink': ' · ไร้สัญญาณ',
+    'u.uav': 'ลำ', 'u.m': 'ม.', 'u.km': 'กม.', 'u.ms': 'ม./วิ', 'u.rai': 'ไร่', 'u.area': 'ไร่', 'u.cells': 'เซลล์',
+    'ev.noTarget': '{0} ไม่มีเป้าหมายที่พลังงานเพียงพอ — กลับฐาน',
+    'ev.relink': '{0} กลับเข้าระยะสื่อสาร — ซิงก์ belief {1} เซลล์',
+    'ev.unlink': '{0} หลุดระยะสื่อสาร — วางแผนด้วยข้อมูลของตนเอง',
+    'ev.reserve': '{0} พลังงานถึงเกณฑ์สำรอง {1}% — กลับฐาน',
+    'ev.atBase': '{0} ถึงฐาน — เปลี่ยนแบตเตอรี่',
+    'ev.swapped': '{0} เปลี่ยนแบตเตอรี่เสร็จ — กลับเข้าภารกิจ',
+    'ev.heat': '{0} เข้าเขตความร้อนสูง ({1})',
+    'ev.lostHeat': '{0} สูญเสียจากความร้อนแนวไฟ',
+    'ev.lostBatt': '{0} พลังงานหมดกลางอากาศ — สูญเสีย',
+    'ev.evade': '{0} ถอนตัวฉุกเฉินออกจากแนวไฟ',
+    'ev.reroute': '{0} วางเส้นทางใหม่ — ต้นทุนอันตรายบนเส้นทางเดิม {1}',
+    'ev.cover80': 'ครอบคลุมการตรวจพบแนวไฟ 80% ที่ T+{0}',
+    'ev.start': 'เริ่มภารกิจ — ฝูงโดรน {0} ลำ · จุดต้นเพลิง {1} จุด · seed {2}',
+    'ev.fleet': 'ปรับขนาดฝูงเป็น {0} ลำ',
+    'ev.predOn': 'เปิดโมดูลประมาณการพื้นที่รุกลาม',
+    'ev.predOff': 'ปิดโมดูลประมาณการ — รันแบบ baseline',
+    'ev.snap': 'บันทึกผลรัน ({0}) ที่ T+{1}',
+    'ev.ember': 'พบจุดไฟใหม่จากสะเก็ดไฟใต้ลม ที่กริด ({0},{1})',
+    'ev.movebase': 'ย้ายกองบัญชาการภาคพื้นดินไปพิกัด ({0}, {1}) ม. — ถางพื้นที่รัศมี 135 ม.'
+  },
+
+  en: {
+    'brand.name': 'Firefront Swarm Console',
+    'brand.sub': 'Wildfire UAV swarm · R&D prototype',
+    'pill.mode.pred': 'Mode: spread prediction',
+    'pill.mode.base': 'Mode: baseline (no prediction)',
+    'pill.fire': 'Fire {0} {1}',
+    'clock.label': 'MISSION T+',
+    'sec.mission': 'Mission control',
+    'btn.pause': '⏸ Pause', 'btn.resume': '▶ Resume', 'btn.reset': 'Reset',
+    'btn.movebase': 'Relocate ground command post',
+    'lbl.simspeed': 'Simulation speed',
+    'sec.swarm': 'Swarm parameters',
+    'lbl.n': 'Number of UAVs', 'lbl.reserve': 'Energy reserve threshold',
+    'lbl.sensor': 'Sensor radius', 'lbl.comm': 'Inter-UAV comm range',
+    'sec.env': 'Wildfire environment',
+    'lbl.wind': 'Wind speed', 'lbl.dir': 'Wind direction',
+    'lbl.rate': 'Spread rate', 'lbl.smokeden': 'Smoke density',
+    'sec.model': 'Path-planning model',
+    'tog.pred': 'Fire-spread encroachment module',
+    'tog.pred.d': 'Projects the fire front 90 s ahead and avoids it in advance — switch off to run the baseline',
+    'tog.coop': 'Decentralised swarm coordination',
+    'tog.coop.d': 'Shares belief and positions within comm range to cut redundant coverage',
+    'tog.energy': 'Energy management module',
+    'tog.energy.d': 'Forces return-to-base once remaining energy hits the reserve threshold',
+    'sec.layers': '3D scene layers',
+    'btn.heatzone': 'Heat zone', 'btn.smoke': 'Smoke', 'btn.paths': 'Tracks', 'btn.sensorcone': 'Sensor cone',
+    'note.camera': 'Drag to orbit · scroll to zoom · right-drag to pan',
+    'hint.terrain': 'Simulated terrain 2.4 × 2.4 km · 60 × 60 grid (40 m/cell)',
+    'cam.orbit': 'Overview', 'cam.follow': 'Follow', 'cam.front': 'Fire front', 'cam.top': 'Top-down',
+    'map.title': '2D fire map', 'map.pick': 'Click to place the command post',
+    'map.info': 'belief {0}% · surveyed {1}%',
+    'map.wind': 'Wind {0}° {1} {2}',
+    'layer.fire': 'Fire', 'layer.smoke': 'Smoke', 'layer.heat': 'Heat', 'layer.belief': 'Belief', 'layer.track': 'Tracks',
+    'log.title': 'Operations event log',
+    'sec.metrics': 'Metrics from the paper',
+    'sec.status': 'Per-UAV status',
+    'sec.cmp': 'Baseline comparison',
+    'cmp.metric': 'Metric', 'cmp.model': 'With spread model', 'cmp.base': 'Baseline',
+    'cmp.time': 'Mission time (mm:ss)',
+    'btn.snap': 'Record current run', 'btn.clearsnap': 'Clear',
+    'note.snap': 'Records the current run into the column matching the active mode, ready to paste into section 4 (Results).',
+    'legend.det': 'Fire detected', 'legend.batt': 'Mean energy', 'legend.fire': 'Fire area',
+    'm.detect': 'Active fire front detected',
+    'm.detectCum': 'Cumulative detection of burnt area',
+    'm.dist': 'Mean standoff from fire front',
+    'm.energy': 'Total energy consumed',
+    'm.surv': 'Swarm survival rate',
+    'm.t80': 'Time to 80% front coverage',
+    'm.area': 'Cumulative burned area',
+    'm.danger': 'Hazard entries / re-routes',
+    'm.survey': 'Area surveyed',
+    'c.detect': 'Front detected (%)', 'c.detectCum': 'Cumulative detection (%)', 'c.meanDist': 'Standoff ({0})',
+    'c.energyWh': 'Energy (Wh)', 'c.survival': 'Survival (%)', 'c.danger': 'Hazard entries',
+    'c.reroute': 'Re-routes', 'c.burnedArea': 'Burned area ({0})',
+    'd.batt': 'Battery', 'd.dist': 'To fire', 'd.det': 'Detected',
+    'st.SURVEY': 'Survey', 'st.RETURN': 'RTB', 'st.CHARGE': 'Swap', 'st.LOST': 'Lost',
+    'st.nolink': ' · no link',
+    'u.uav': 'UAVs', 'u.m': 'm', 'u.km': 'km', 'u.ms': 'm/s', 'u.rai': 'ha', 'u.area': 'ha', 'u.cells': 'cells',
+    'ev.noTarget': '{0} has no target within energy budget — returning to base',
+    'ev.relink': '{0} back in comm range — synced belief for {1} cells',
+    'ev.unlink': '{0} lost comm link — planning on its own data',
+    'ev.reserve': '{0} hit the {1}% energy reserve — returning to base',
+    'ev.atBase': '{0} reached base — battery swap',
+    'ev.swapped': '{0} battery swapped — back on mission',
+    'ev.heat': '{0} entered high-heat zone ({1})',
+    'ev.lostHeat': '{0} lost to radiant heat at the fire front',
+    'ev.lostBatt': '{0} ran out of energy in flight — lost',
+    'ev.evade': '{0} emergency withdrawal from the fire front',
+    'ev.reroute': '{0} re-routed — hazard cost on previous path {1}',
+    'ev.cover80': '80% of the fire front detected at T+{0}',
+    'ev.start': 'Mission start — {0} UAVs · {1} ignition points · seed {2}',
+    'ev.fleet': 'Swarm resized to {0} UAVs',
+    'ev.predOn': 'Fire-spread encroachment module enabled',
+    'ev.predOff': 'Encroachment module off — running baseline',
+    'ev.snap': 'Run recorded ({0}) at T+{1}',
+    'ev.ember': 'New spot fire from downwind embers at grid ({0},{1})',
+    'ev.movebase': 'Ground command post moved to ({0}, {1}) m — clearing carved, radius 135 m'
+  },
+
+  zh: {
+    'brand.name': '火线无人机群控制台',
+    'brand.sub': '林火无人机群 · 研发原型',
+    'pill.mode.pred': '模式：蔓延预测',
+    'pill.mode.base': '模式：基线（无预测）',
+    'pill.fire': '火线 {0} {1}',
+    'clock.label': '任务时间 T+',
+    'sec.mission': '任务控制',
+    'btn.pause': '⏸ 暂停', 'btn.resume': '▶ 继续', 'btn.reset': '重置',
+    'btn.movebase': '迁移地面指挥所',
+    'lbl.simspeed': '仿真速度',
+    'sec.swarm': '无人机群参数',
+    'lbl.n': '无人机数量', 'lbl.reserve': '能量储备阈值',
+    'lbl.sensor': '传感器半径', 'lbl.comm': '机间通信距离',
+    'sec.env': '林火环境',
+    'lbl.wind': '风速', 'lbl.dir': '风向',
+    'lbl.rate': '蔓延速率', 'lbl.smokeden': '烟雾浓度',
+    'sec.model': '路径规划模型',
+    'tog.pred': '火势侵入预估模块',
+    'tog.pred.d': '提前 90 秒预测火线位置并预先规避 — 关闭即为基线方案',
+    'tog.coop': '去中心化机群协同',
+    'tog.coop.d': '在通信范围内共享置信度与位置，减少重复搜索',
+    'tog.energy': '能量管理模块',
+    'tog.energy.d': '剩余能量低于储备阈值时强制返航',
+    'sec.layers': '三维场景图层',
+    'btn.heatzone': '热区', 'btn.smoke': '烟雾', 'btn.paths': '航迹', 'btn.sensorcone': '传感器锥',
+    'note.camera': '拖动旋转 · 滚轮缩放 · 右键拖动平移',
+    'hint.terrain': '仿真地形 2.4 × 2.4 公里 · 60 × 60 网格（每格 40 米）',
+    'cam.orbit': '全景', 'cam.follow': '跟随', 'cam.front': '火线', 'cam.top': '俯视',
+    'map.title': '二维林火地图', 'map.pick': '点击选择指挥所位置',
+    'map.info': '置信度 {0}% · 已搜索 {1}%',
+    'map.wind': '风 {0}° {1} {2}',
+    'layer.fire': '火', 'layer.smoke': '烟', 'layer.heat': '热', 'layer.belief': '置信度', 'layer.track': '航迹',
+    'log.title': '行动事件记录',
+    'sec.metrics': '论文指标',
+    'sec.status': '各机状态',
+    'sec.cmp': '基线对比表',
+    'cmp.metric': '指标', 'cmp.model': '含蔓延模型', 'cmp.base': '基线',
+    'cmp.time': '任务时长（分:秒）',
+    'btn.snap': '记录本次运行', 'btn.clearsnap': '清除',
+    'note.snap': '按当前模式把本次运行结果记入对应列，可直接用于第 4 章研究结果的对比表。',
+    'legend.det': '火线探测率', 'legend.batt': '平均能量', 'legend.fire': '火场面积',
+    'm.detect': '当前火线探测比例',
+    'm.detectCum': '过火区累计探测比例',
+    'm.dist': '与火线的平均距离',
+    'm.energy': '总能耗',
+    'm.surv': '机群存活率',
+    'm.t80': '火线覆盖 80% 用时',
+    'm.area': '累计过火面积',
+    'm.danger': '进入危险区 / 重规划',
+    'm.survey': '已搜索面积',
+    'c.detect': '火线探测 (%)', 'c.detectCum': '累计探测 (%)', 'c.meanDist': '与火线距离 ({0})',
+    'c.energyWh': '能耗 (Wh)', 'c.survival': '存活率 (%)', 'c.danger': '进入危险区',
+    'c.reroute': '重规划次数', 'c.burnedArea': '过火面积 ({0})',
+    'd.batt': '电量', 'd.dist': '距火线', 'd.det': '已探测',
+    'st.SURVEY': '巡查', 'st.RETURN': '返航', 'st.CHARGE': '换电', 'st.LOST': '损失',
+    'st.nolink': ' · 失联',
+    'u.uav': '架', 'u.m': '米', 'u.km': '公里', 'u.ms': '米/秒', 'u.rai': '公顷', 'u.area': '公顷', 'u.cells': '格',
+    'ev.noTarget': '{0} 无满足能量约束的目标 — 返航',
+    'ev.relink': '{0} 重新进入通信范围 — 同步 {1} 个网格的置信度',
+    'ev.unlink': '{0} 失去通信链路 — 依靠自身数据规划',
+    'ev.reserve': '{0} 触及 {1}% 能量储备阈值 — 返航',
+    'ev.atBase': '{0} 抵达基地 — 更换电池',
+    'ev.swapped': '{0} 换电完成 — 重返任务',
+    'ev.heat': '{0} 进入高温区（{1}）',
+    'ev.lostHeat': '{0} 因火线辐射热损失',
+    'ev.lostBatt': '{0} 空中能量耗尽 — 损失',
+    'ev.evade': '{0} 紧急撤离火线',
+    'ev.reroute': '{0} 重新规划航线 — 原路径危险代价 {1}',
+    'ev.cover80': '火线探测覆盖率达 80%，时间 T+{0}',
+    'ev.start': '任务开始 — {0} 架无人机 · {1} 处起火点 · seed {2}',
+    'ev.fleet': '机群规模调整为 {0} 架',
+    'ev.predOn': '已启用火势侵入预估模块',
+    'ev.predOff': '已关闭预估模块 — 运行基线方案',
+    'ev.snap': '已记录运行结果（{0}），时间 T+{1}',
+    'ev.ember': '下风向飞火形成新火点，网格（{0},{1}）',
+    'ev.movebase': '地面指挥所迁至 ({0}, {1}) 米 — 已清出半径 135 米空地'
+  }
+};
+
+var LANG = 'th';
+try { var _sv = localStorage.getItem('ffsc.lang'); if (_sv && STR[_sv]) LANG = _sv; } catch (e) {}
+
+function T(k, a, b, c) {
+  var s = (STR[LANG] && STR[LANG][k]) || STR.th[k] || k;
+  if (a !== undefined) s = s.replace('{0}', a);
+  if (b !== undefined) s = s.replace('{1}', b);
+  if (c !== undefined) s = s.replace('{2}', c);
+  return s;
+}
+
+/* 1 เซลล์ = 40×40 ม. = 1 ไร่ พอดี — ภาษาอื่นแสดงเป็นเฮกตาร์ */
+function areaVal(cells) { return LANG === 'th' ? cells : (cells * 0.16).toFixed(1); }
 /* ============================ ฝูงโดรน (โมดูล 3 + 4) ============================ */
 var DCOL = ['#59B7B0', '#93C46E', '#EDB44B', '#C79BE8', '#6FA0E0'];
 
-function logEv(tag, text) {
-  S.ev.push({ t: S.t, tag: tag, text: text });
+function logEv(tag, key, a, b, c) {
+  S.ev.push({ t: S.t, tag: tag, k: key, a: a, b: b, c: c });
   if (S.ev.length > 40) S.ev.shift();
   S.evDirty = true;
 }
@@ -781,7 +1063,7 @@ function plan(d, force) {
     sc = candidateScore(d, i); if (sc !== null && sc > best) { best = sc; bi = i; }
   }
   if (bi < 0) {                                                  // ไม่มีเป้าหมายที่ปลอดภัย/พลังงานพอ → กลับฐาน
-    if (d.state !== 'RETURN') { d.state = 'RETURN'; logEv('energy', d.name + ' ไม่มีเป้าหมายที่พลังงานเพียงพอ — กลับฐาน'); }
+    if (d.state !== 'RETURN') { d.state = 'RETURN'; logEv('energy', 'ev.noTarget', d.name); }
     d.tx = S.base.x; d.tz = S.base.z; d.ti = -1; return;
   }
   var p = cellToWorld(bi % G, (bi / G) | 0);
@@ -838,10 +1120,10 @@ function updateComms() {
       links++;
       if (!was && dr.obs.size) {                                 // ซิงก์ belief ที่ค้างไว้
         dr.obs.forEach(function (v, i) { S.belief[i] = v; S.seen[i] = S.t; });
-        logEv('sys', dr.name + ' กลับเข้าระยะสื่อสาร — ซิงก์ belief ' + dr.obs.size + ' เซลล์');
+        logEv('sys', 'ev.relink', dr.name, dr.obs.size);
         dr.obs.clear();
       }
-    } else if (was) logEv('hazard', dr.name + ' หลุดระยะสื่อสาร — วางแผนด้วยข้อมูลของตนเอง');
+    } else if (was) logEv('hazard', 'ev.unlink', dr.name);
   }
   S.metrics.commLinks = links;
 }
@@ -857,7 +1139,7 @@ function stepDrones(dt) {
     var needBack = (dback / CRUISE) * DRAIN * 1.20 + 1.5;
     if (S.flags.energy && d.state === 'SURVEY' && d.batt - needBack <= S.params.reserve) {
       d.state = 'RETURN'; d.tx = S.base.x; d.tz = S.base.z; d.ti = -1;
-      logEv('energy', d.name + ' พลังงานถึงเกณฑ์สำรอง ' + S.params.reserve + '% — กลับฐาน');
+      logEv('energy', 'ev.reserve', d.name, S.params.reserve);
     }
 
     // เดินทางเข้าหาเป้าหมาย
@@ -865,10 +1147,10 @@ function stepDrones(dt) {
     if (d.state === 'CHARGE') {
       d.batt = Math.min(100, d.batt + CHARGE * dt);
       d.spd = 0;
-      if (d.batt >= 99.5) { d.state = 'SURVEY'; plan(d, true); logEv('energy', d.name + ' เปลี่ยนแบตเตอรี่เสร็จ — กลับเข้าภารกิจ'); }
+      if (d.batt >= 99.5) { d.state = 'SURVEY'; plan(d, true); logEv('energy', 'ev.swapped', d.name); }
     } else {
       if (dist < 45) {
-        if (d.state === 'RETURN') { d.state = 'CHARGE'; logEv('energy', d.name + ' ถึงฐาน — เปลี่ยนแบตเตอรี่'); }
+        if (d.state === 'RETURN') { d.state = 'CHARGE'; logEv('energy', 'ev.atBase', d.name); }
         else plan(d);
       }
       var sp = Math.min(CRUISE, dist / 1.2);
@@ -894,20 +1176,20 @@ function stepDrones(dt) {
       d.tz = clamp(d.z + gz / gl * 520, -HALF + 60, HALF - 60);
       d.ti = -1;
       if (!d.evading) { d.evading = true; d.lastRR = S.t; S.metrics.reroute++;
-        logEv('reroute', d.name + ' ถอนตัวฉุกเฉินออกจากแนวไฟ'); }
+        logEv('reroute', 'ev.evade', d.name); }
     } else if (heat < 0.32 && d.evading) { d.evading = false; plan(d); }
     if (heat > 0.55) {
-      if (!d.inDanger) { d.inDanger = true; S.metrics.danger++; logEv('hazard', d.name + ' เข้าเขตความร้อนสูง (' + heat.toFixed(2) + ')'); }
+      if (!d.inDanger) { d.inDanger = true; S.metrics.danger++; logEv('hazard', 'ev.heat', d.name, heat.toFixed(2)); }
       d.health -= (heat - 0.55) * 0.55 * dt;
     } else if (heat < 0.4) d.inDanger = false;
 
     if (d.health <= 0) {
       d.state = 'LOST'; S.metrics.lost++;
-      logEv('hazard', d.name + ' สูญเสียจากความร้อนแนวไฟ');
+      logEv('hazard', 'ev.lostHeat', d.name);
     }
     if (d.batt <= 0) {
       d.batt = 0; d.state = 'LOST'; S.metrics.lost++;
-      logEv('energy', d.name + ' พลังงานหมดกลางอากาศ — สูญเสีย');
+      logEv('energy', 'ev.lostBatt', d.name);
     }
 
     // เส้นทางบิน (trail)
@@ -931,7 +1213,7 @@ function checkReroute() {
       plan(d);
       if (d.ti !== oldi) {
         d.reroutes++; S.metrics.reroute++; d.lastRR = S.t;
-        logEv('reroute', d.name + ' วางเส้นทางใหม่ — ต้นทุนอันตรายบนเส้นทางเดิม ' + ph.max.toFixed(2));
+        logEv('reroute', 'ev.reroute', d.name, ph.max.toFixed(2));
       }
     }
   }
@@ -973,7 +1255,7 @@ function computeMetrics() {
   m.battAvg = alive ? sumB / alive : 0;
   if (m.t80 === null && m.detect >= 80 && fireEver > 30) {
     m.t80 = S.t;
-    logEv('sys', 'ครอบคลุมการตรวจพบแนวไฟ 80% ที่ T+' + fmtT(S.t));
+    logEv('sys', 'ev.cover80', fmtT(S.t));
   }
 }
 
@@ -1005,7 +1287,7 @@ function resetSim(keepSeed) {
   }
   updateDistField(); updateHeat(); updateSmoke(0.5); updatePrediction();
   spawnDrones(S.params.n);
-  logEv('sys', 'เริ่มภารกิจ — ฝูงโดรน ' + S.params.n + ' ลำ · จุดต้นเพลิง ' + pts.length + ' จุด · seed ' + S.seed);
+  logEv('sys', 'ev.start', S.params.n, pts.length, S.seed);
 }
 
 /* --------- การกระเด็นของสะเก็ดไฟ (ember spotting) ใต้ลม --------- */
@@ -1017,7 +1299,7 @@ function emberSpot() {
   var y = Math.round(sy + w.y * jump + (rnd() - 0.5) * 3);
   if (x < 1 || y < 1 || x >= G - 1 || y >= G - 1) return;
   if (S.fuel[idx(x, y)] < 0.45 || S.state[idx(x, y)] !== 0) return;
-  if (ignite(x, y)) logEv('hazard', 'พบจุดไฟใหม่จากสะเก็ดไฟใต้ลม ที่กริด (' + x + ',' + y + ')');
+  if (ignite(x, y)) logEv('hazard', 'ev.ember', x, y);
 }
 
 /* --------- ลูปจำลองหลัก --------- */
@@ -1695,24 +1977,25 @@ function drawTrend() {
 
 /* ============================ HUD ============================ */
 var METRICS = [
-  { id: 'detect', th: 'สัดส่วนแนวไฟปัจจุบันที่ตรวจพบ', en: 'active-front detection (EMA)' },
-  { id: 'detectCum', th: 'ตรวจพบสะสมของพื้นที่ที่เคยลุกไหม้', en: 'cumulative fire detection' },
-  { id: 'dist', th: 'ระยะห่างเฉลี่ยจากแนวไฟ', en: 'mean standoff' },
-  { id: 'energy', th: 'พลังงานที่ใช้รวม', en: 'total energy' },
-  { id: 'surv', th: 'อัตราการรอดของฝูงโดรน', en: 'swarm survival' },
-  { id: 't80', th: 'เวลาครอบคลุมแนวไฟ 80%', en: 'time to 80%' },
-  { id: 'area', th: 'พื้นที่เผาไหม้สะสม', en: 'burned area' },
-  { id: 'danger', th: 'เข้าเขตอันตราย / re-route', en: 'hazard entries / reroutes' },
-  { id: 'survey', th: 'พื้นที่ที่สำรวจแล้ว', en: 'area surveyed' }
+  { id: 'detect', en: 'active-front detection (EMA)' },
+  { id: 'detectCum', en: 'cumulative fire detection' },
+  { id: 'dist', en: 'mean standoff' },
+  { id: 'energy', en: 'total energy' },
+  { id: 'surv', en: 'swarm survival' },
+  { id: 't80', en: 'time to 80%' },
+  { id: 'area', en: 'burned area' },
+  { id: 'danger', en: 'hazard entries / reroutes' },
+  { id: 'survey', en: 'area surveyed' }
 ];
-var mEls = {};
+var mEls = {}, mLabels = {};
 (function buildMetrics() {
   var host = document.getElementById('metrics');
   METRICS.forEach(function (m) {
     var row = document.createElement('div'); row.className = 'mrow';
-    row.innerHTML = '<span class="mk">' + m.th + '<small>' + m.en + '</small></span><span class="mv plain">—</span>';
+    row.innerHTML = '<span class="mk"><span class="mkt"></span><small>' + m.en + '</small></span><span class="mv plain">—</span>';
     host.appendChild(row);
     mEls[m.id] = row.lastChild;
+    mLabels[m.id] = row.querySelector('.mkt');
   });
 })();
 
@@ -1723,7 +2006,7 @@ function updateMetrics() {
   cls(mEls.detect, m.detect >= 80 ? 'good' : m.detect >= 45 ? 'warn' : 'bad');
   mEls.detectCum.textContent = (m.detectCum || 0).toFixed(1) + '%';
   cls(mEls.detectCum, (m.detectCum || 0) >= 60 ? 'good' : (m.detectCum || 0) >= 30 ? 'warn' : 'bad');
-  mEls.dist.textContent = Math.round(m.meanDist) + ' ม.';
+  mEls.dist.textContent = Math.round(m.meanDist) + ' ' + T('u.m');
   cls(mEls.dist, m.meanDist >= 260 ? 'good' : m.meanDist >= 150 ? 'warn' : 'bad');
   mEls.energy.textContent = m.energyWh.toFixed(0) + ' Wh';
   cls(mEls.energy, 'plain');
@@ -1731,7 +2014,7 @@ function updateMetrics() {
   cls(mEls.surv, m.survival > 99 ? 'good' : m.survival >= 60 ? 'warn' : 'bad');
   mEls.t80.textContent = m.t80 === null ? '—' : fmtT(m.t80);
   cls(mEls.t80, m.t80 === null ? 'plain' : 'good');
-  mEls.area.textContent = (m.burnedArea || 0) + ' ไร่';
+  mEls.area.textContent = areaVal(m.burnedArea || 0) + ' ' + T('u.area');
   cls(mEls.area, 'plain');
   mEls.danger.textContent = m.danger + ' / ' + m.reroute;
   cls(mEls.danger, m.danger > 0 ? 'warn' : 'good');
@@ -1748,8 +2031,9 @@ function buildDroneCards() {
       '<div class="d-top"><span class="d-dot" style="color:' + d.col + '"></span>' +
       '<span class="d-id">' + d.name + '</span><span class="d-state">SURVEY</span></div>' +
       '<div class="batt"><i style="width:100%"></i><u style="left:25%"></u></div>' +
-      '<div class="d-stats"><div><b>แบตเตอรี่</b><span>100%</span></div>' +
-      '<div><b>ห่างแนวไฟ</b><span>—</span></div><div><b>ตรวจพบ</b><span>0</span></div></div>';
+      '<div class="d-stats"><div><b>' + T('d.batt') + '</b><span>100%</span></div>' +
+      '<div><b>' + T('d.dist') + '</b><span>—</span></div>' +
+      '<div><b>' + T('d.det') + '</b><span>0</span></div></div>';
     host.appendChild(el);
     dEls.push({
       root: el, state: el.querySelector('.d-state'), bar: el.querySelector('.batt i'),
@@ -1757,19 +2041,19 @@ function buildDroneCards() {
     });
   });
 }
-var ST_TH = { SURVEY: 'สำรวจ', RETURN: 'กลับฐาน', CHARGE: 'เปลี่ยนแบต', LOST: 'สูญเสีย' };
+
 function updateDroneCards() {
   for (var k = 0; k < S.drones.length; k++) {
     var d = S.drones[k], e = dEls[k]; if (!e) continue;
-    e.state.textContent = ST_TH[d.state] + (d.linked ? '' : ' · ไร้สัญญาณ');
+    e.state.textContent = T('st.' + d.state) + (d.linked ? '' : T('st.nolink'));
     e.state.style.color = d.state === 'LOST' ? '#E23B2A' : (d.linked ? '' : '#EDB44B');
     e.bar.style.width = Math.max(0, d.batt).toFixed(0) + '%';
     e.bar.style.background = d.batt < S.params.reserve ? '#E23B2A' : d.batt < S.params.reserve + 18 ? '#EDB44B' : '#93C46E';
     e.mark.style.left = S.params.reserve + '%';
     e.vals[0].textContent = Math.max(0, d.batt).toFixed(0) + '%';
     var df = d.state === 'LOST' ? 0 : sampleField(S.distFire, d.x, d.z);
-    e.vals[1].textContent = d.state === 'LOST' ? '—' : (df > 3500 ? '>3.5 กม.' : Math.round(df) + ' ม.');
-    e.vals[2].textContent = d.detects + ' เซลล์';
+    e.vals[1].textContent = d.state === 'LOST' ? '—' : (df > 3500 ? '>3.5 ' + T('u.km') : Math.round(df) + ' ' + T('u.m'));
+    e.vals[2].textContent = d.detects + ' ' + T('u.cells');
     e.root.style.opacity = d.state === 'LOST' ? 0.45 : 1;
   }
 }
@@ -1782,7 +2066,7 @@ function updateLog() {
   for (var i = 0; i < list.length; i++) {
     var e = list[i];
     html += '<div class="logrow"><time>T+' + fmtT(e.t) + '</time>' +
-      '<span class="tag ' + e.tag + '">' + e.tag.toUpperCase() + '</span><p>' + e.text + '</p></div>';
+      '<span class="tag ' + e.tag + '">' + e.tag.toUpperCase() + '</span><p>' + T(e.k, e.a, e.b, e.c) + '</p></div>';
   }
   host.innerHTML = html;
 }
@@ -1790,38 +2074,39 @@ function updateLog() {
 function updateTop() {
   document.getElementById('clock').textContent = fmtT(S.t);
   var pm = document.getElementById('pillMode');
-  pm.textContent = S.flags.predict ? 'โหมด: พยากรณ์การลุกลาม' : 'โหมด: baseline (ไม่พยากรณ์)';
+  pm.textContent = T(S.flags.predict ? 'pill.mode.pred' : 'pill.mode.base');
   pm.className = 'pill' + (S.flags.predict ? ' on' : '');
   var alive = S.drones.filter(function (d) { return d.state !== 'LOST'; }).length;
   var pc = document.getElementById('pillComm');
   pc.textContent = 'COMM ' + S.metrics.commLinks + '/' + alive;
   pc.className = 'pill' + (S.metrics.commLinks === alive && alive ? ' on' : ' alarm');
   var pa = document.getElementById('pillAlarm');
-  pa.textContent = 'แนวไฟ ' + S.metrics.fireArea + ' ไร่';
+  pa.textContent = T('pill.fire', areaVal(S.metrics.fireArea), T('u.area'));
   pa.className = 'pill' + (S.metrics.fireArea > 0 ? ' alarm' : '');
-  document.getElementById('mapinfo').textContent = 'belief ' + S.metrics.detect.toFixed(0) + '% · สำรวจ ' + S.metrics.surveyed.toFixed(0) + '%';
-  document.getElementById('windlabel').textContent = 'ลม ' + ('00' + S.wind.dir).slice(-3) + '° ' + S.wind.speed.toFixed(1) + ' ม./วิ';
+  document.getElementById('mapinfo').textContent = T('map.info', S.metrics.detect.toFixed(0), S.metrics.surveyed.toFixed(0));
+  document.getElementById('windlabel').textContent =
+    T('map.wind', ('00' + S.wind.dir).slice(-3), S.wind.speed.toFixed(1), T('u.ms'));
 }
 
 /* ============================ ตารางเปรียบเทียบ ============================ */
 var CMP = [
-  { k: 'detect', th: 'ตรวจพบแนวไฟ (%)', f: function (v) { return v.toFixed(1); } },
-  { k: 'detectCum', th: 'ตรวจพบสะสม (%)', f: function (v) { return (v || 0).toFixed(1); } },
-  { k: 'meanDist', th: 'ระยะห่างแนวไฟ (ม.)', f: function (v) { return Math.round(v); } },
-  { k: 'energyWh', th: 'พลังงาน (Wh)', f: function (v) { return v.toFixed(0); } },
-  { k: 'survival', th: 'อัตรารอด (%)', f: function (v) { return v.toFixed(0); } },
-  { k: 'danger', th: 'เข้าเขตอันตราย', f: function (v) { return v; } },
-  { k: 'reroute', th: 're-route', f: function (v) { return v; } },
-  { k: 'burnedArea', th: 'พื้นที่เผาไหม้ (ไร่)', f: function (v) { return v; } }
+  { k: 'detect', f: function (v) { return v.toFixed(1); } },
+  { k: 'detectCum', f: function (v) { return (v || 0).toFixed(1); } },
+  { k: 'meanDist', u: 'u.m', f: function (v) { return Math.round(v); } },
+  { k: 'energyWh', f: function (v) { return v.toFixed(0); } },
+  { k: 'survival', f: function (v) { return v.toFixed(0); } },
+  { k: 'danger', f: function (v) { return v; } },
+  { k: 'reroute', f: function (v) { return v; } },
+  { k: 'burnedArea', u: 'u.area', f: function (v) { return areaVal(v); } }
 ];
 function drawCmp() {
   var b = document.getElementById('cmpbody'), h = '';
   CMP.forEach(function (r) {
     var a = S.snaps.model, c = S.snaps.base;
-    h += '<tr><td>' + r.th + '</td><td' + (a ? '' : ' class="empty"') + '>' + (a ? r.f(a[r.k]) : '—') +
+    h += '<tr><td>' + T('c.' + r.k, r.u ? T(r.u) : undefined) + '</td><td' + (a ? '' : ' class="empty"') + '>' + (a ? r.f(a[r.k]) : '—') +
       '</td><td' + (c ? '' : ' class="empty"') + '>' + (c ? r.f(c[r.k]) : '—') + '</td></tr>';
   });
-  h += '<tr><td>เวลาภารกิจ (มม:วว)</td><td' + (S.snaps.model ? '' : ' class="empty"') + '>' +
+  h += '<tr><td>' + T('cmp.time') + '</td><td' + (S.snaps.model ? '' : ' class="empty"') + '>' +
     (S.snaps.model ? fmtT(S.snaps.model.t) : '—') + '</td><td' + (S.snaps.base ? '' : ' class="empty"') + '>' +
     (S.snaps.base ? fmtT(S.snaps.base.t) : '—') + '</td></tr>';
   b.innerHTML = h;
@@ -1829,27 +2114,28 @@ function drawCmp() {
 
 /* ============================ การเชื่อมต่อ UI ============================ */
 function $(id) { return document.getElementById(id); }
+var sliderUpdaters = [];
 function slider(id, vid, fmt, apply) {
   var el = $(id), out = $(vid);
   function upd() { out.textContent = fmt(parseFloat(el.value)); apply(parseFloat(el.value)); }
-  el.addEventListener('input', upd); upd();
+  el.addEventListener('input', upd); sliderUpdaters.push(upd); upd();
 }
-slider('sN', 'vN', function (v) { return v + ' ลำ'; }, function (v) {
+slider('sN', 'vN', function (v) { return v + ' ' + T('u.uav'); }, function (v) {
   if (v === S.params.n) return;
   S.params.n = v; spawnDrones(v); buildDroneVisuals(); buildDroneCards();
-  logEv('sys', 'ปรับขนาดฝูงเป็น ' + v + ' ลำ');
+  logEv('sys', 'ev.fleet', v);
 });
 slider('sRes', 'vRes', function (v) { return v + '%'; }, function (v) { S.params.reserve = v; });
-slider('sSens', 'vSens', function (v) { return v + ' ม.'; }, function (v) { S.params.sensor = v; });
-slider('sComm', 'vComm', function (v) { return v + ' ม.'; }, function (v) { S.params.comm = v; });
-slider('sWind', 'vWind', function (v) { return v.toFixed(1) + ' ม./วิ'; }, function (v) { S.wind.speed = v; });
+slider('sSens', 'vSens', function (v) { return v + ' ' + T('u.m'); }, function (v) { S.params.sensor = v; });
+slider('sComm', 'vComm', function (v) { return v + ' ' + T('u.m'); }, function (v) { S.params.comm = v; });
+slider('sWind', 'vWind', function (v) { return v.toFixed(1) + ' ' + T('u.ms'); }, function (v) { S.wind.speed = v; });
 slider('sDir', 'vDir', function (v) { return ('00' + v).slice(-3) + '°'; }, function (v) { S.wind.dir = v; });
 slider('sRate', 'vRate', function (v) { return v.toFixed(2) + '×'; }, function (v) { S.params.rate = v; });
 slider('sSmoke', 'vSmoke', function (v) { return v.toFixed(2) + '×'; }, function (v) { S.params.smokeMul = v; });
 
 $('cPred').addEventListener('change', function () {
   S.flags.predict = this.checked;
-  logEv('sys', this.checked ? 'เปิดโมดูลประมาณการพื้นที่รุกลาม' : 'ปิดโมดูลประมาณการ — รันแบบ baseline');
+  logEv('sys', this.checked ? 'ev.predOn' : 'ev.predOff');
 });
 $('cCoop').addEventListener('change', function () { S.flags.coop = this.checked; });
 $('cEnergy').addEventListener('change', function () { S.flags.energy = this.checked; });
@@ -1861,7 +2147,7 @@ $('btnMoveBase').addEventListener('click', function () {
   this.style.background = moveBaseMode ? 'rgba(89,183,176,.18)' : '';
   this.style.borderColor = moveBaseMode ? 'var(--teal-dim)' : '';
   mapCv.style.cursor = moveBaseMode ? 'crosshair' : '';
-  $('maptitle').textContent = moveBaseMode ? 'คลิกเลือกจุดตั้งกองบัญชาการ' : 'แผนที่ไฟป่า 2D';
+  $('maptitle').textContent = T(moveBaseMode ? 'map.pick' : 'map.title');
 });
 mapCv.addEventListener('click', function (ev) {
   if (!moveBaseMode) return;
@@ -1874,15 +2160,15 @@ mapCv.addEventListener('click', function (ev) {
   S.drones.forEach(function (d) {
     if (d.state === 'RETURN' || d.state === 'CHARGE') { d.tx = wx; d.tz = wz; d.ti = -1; }
   });
-  logEv('sys', 'ย้ายกองบัญชาการภาคพื้นดินไปพิกัด (' + Math.round(wx) + ', ' + Math.round(wz) + ') ม. — ถางพื้นที่รัศมี 135 ม.');
+  logEv('sys', 'ev.movebase', Math.round(wx), Math.round(wz));
   moveBaseMode = false;
   $('btnMoveBase').style.background = ''; $('btnMoveBase').style.borderColor = '';
-  mapCv.style.cursor = ''; $('maptitle').textContent = 'แผนที่ไฟป่า 2D';
+  mapCv.style.cursor = ''; $('maptitle').textContent = T('map.title');
 });
 
 $('btnPlay').addEventListener('click', function () {
   S.running = !S.running;
-  this.textContent = S.running ? '⏸ หยุดชั่วคราว' : '▶ เดินหน้าต่อ';
+  this.textContent = T(S.running ? 'btn.pause' : 'btn.resume');
 });
 $('btnReset').addEventListener('click', function () {
   resetSim(false); buildDroneVisuals(); buildDroneCards();
@@ -1922,15 +2208,40 @@ $('btnSnap').addEventListener('click', function () {
                danger: m.danger, reroute: m.reroute, burnedArea: m.burnedArea || 0, t: S.t };
   S.snaps[S.flags.predict ? 'model' : 'base'] = snap;
   drawCmp();
-  logEv('sys', 'บันทึกผลรัน (' + (S.flags.predict ? 'มีโมเดลลุกลาม' : 'baseline') + ') ที่ T+' + fmtT(S.t));
+  logEv('sys', 'ev.snap', T(S.flags.predict ? 'cmp.model' : 'cmp.base'), fmtT(S.t));
 });
 $('btnClearSnap').addEventListener('click', function () { S.snaps = { model: null, base: null }; drawCmp(); });
 window.addEventListener('keydown', function (e) {
   if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); $('btnPlay').click(); }
 });
 
+/* ============================ สลับภาษา ============================ */
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(function (el) {
+    el.textContent = T(el.getAttribute('data-i18n'));
+  });
+  METRICS.forEach(function (m) { mLabels[m.id].textContent = T('m.' + m.id); });
+  $('btnPlay').textContent = T(S.running ? 'btn.pause' : 'btn.resume');
+  $('maptitle').textContent = T(moveBaseMode ? 'map.pick' : 'map.title');
+  $('mapscale').textContent = '500 ' + T('u.m');
+  sliderUpdaters.forEach(function (f) { f(); });
+  buildDroneCards(); updateDroneCards();
+  S.evDirty = true; updateLog(); updateMetrics(); updateTop(); drawCmp();
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : LANG;
+  document.querySelectorAll('#langsw button').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.lang === LANG);
+  });
+}
+document.querySelectorAll('#langsw button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    LANG = b.dataset.lang;
+    try { localStorage.setItem('ffsc.lang', LANG); } catch (err) {}
+    applyLang();
+  });
+});
+
 /* ============================ ลูปหลัก ============================ */
-buildDroneVisuals(); buildDroneCards(); paintTerrain(); paintTrees(); paintHazard(); drawCmp(); resize();
+buildDroneVisuals(); buildDroneCards(); paintTerrain(); paintTrees(); paintHazard(); drawCmp(); applyLang(); resize();
 
 var clock = new THREE.Clock(), hudAcc = 0, paintAcc = 0;
 function frame() {
@@ -1961,4 +2272,6 @@ frame();
 
 })();
 </script>
-</body></html>
+
+</body>
+</html>
